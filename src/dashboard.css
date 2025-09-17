@@ -1,0 +1,21 @@
+:root {
+    --brand: #0b72b9; --accent: #ff9f1c; --bg: #f0f2f5; --card: #ffffff;
+    --text-dark: #1a202c; --text-light: #4a5568; --border: #e2e8f0;
+    --radius: 12px; --shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+body {
+    font-family: 'Assistant', sans-serif; background-color: var(--bg);
+    margin: 0; color: var(--text-dark); visibility: hidden;
+}
+body.loaded { visibility: visible; }
+.dashboard-header { /* styles */ }
+.kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 20px; }
+.kanban-column { background-color: #e9ecef; border-radius: var(--radius); padding: 15px; }
+.column-title { /* styles */ }
+.kanban-card {
+    background-color: var(--card); padding: 15px; border-radius: 8px;
+    box-shadow: var(--shadow); margin-bottom: 15px; border-left: 4px solid var(--brand);
+}
+.kanban-card[data-status="in-progress"] { border-left-color: var(--accent); }
+/* Add all other dashboard styles */
+

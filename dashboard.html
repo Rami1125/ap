@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>לוח בקרה - מחלקת הזמנות</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --brand: #0b72b9; --accent: #ff9f1c; --bg: #f0f2f5; --card: #ffffff;
+            --text-dark: #1a202c; --text-light: #4a5568; --text-muted: #718096;
+            --border: #e2e8f0; --success: #38a169; --warning: #dd6b20; --danger: #e53e3e;
+            --radius: 12px; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Assistant', sans-serif; background-color: var(--bg); color: var(--text-dark); }
+        .dashboard-container { display: flex; flex-direction: column; height: 100vh; padding: 20px; }
+        .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .dashboard-header h1 { font-size: 28px; }
+        .stats-container { display: flex; gap: 25px; }
+        .stat-item { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+        .stat-count { font-size: 20px; font-weight: 700; }
+        .kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; flex-grow: 1; overflow: hidden; }
+        .kanban-column { background-color: #e9ecef; border-radius: var(--radius); display: flex; flex-direction: column; }
+        .column-title { font-size: 18px; padding: 15px; border-bottom: 2px solid var(--border); }
+        .column-content { padding: 15px; overflow-y: auto; flex-grow: 1; }
+        .kanban-card { background-color: var(--card); border-radius: var(--radius); padding: 15px; box-shadow: var(--shadow); margin-bottom: 15px; }
+        .card-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
+        .client-name { font-weight: 700; }
+        .timestamp { font-size: 12px; color: var(--text-muted); }
+        .card-footer { display: flex; justify-content: flex-end; margin-top: 15px; }
+        .card-btn { border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; color: white; }
+        .card-btn.start { background-color: var(--brand); }
+        .card-btn.complete { background-color: var(--success); }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <h1>לוח בקרה - מחלקת הזמנות</h1>
+            <div class="stats-container">
+                <div class="stat-item"><span>בקשות חדשות:</span><span class="stat-count" id="new-requests-count">0</span></div>
+                <div class="stat-item"><span>בטיפול:</span><span class="stat-count" id="in-progress-count">0</span></div>
+            </div>
+        </header>
+        <main class="kanban-board">
+            <div class="kanban-column"><h2 class="column-title">🔔 בקשות חדשות</h2><div class="column-content" id="new-requests-container"></div></div>
+            <div class="kanban-column"><h2 class="column-title">🧑‍💻 בטיפול</h2><div class="column-content" id="in-progress-container"></div></div>
+            <div class="kanban-column"><h2 class="column-title">✅ הושלמו היום</h2><div class="column-content" id="completed-container"></div></div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
+            authDomain: "hsaban94-cc777.firebaseapp.com",
+            projectId: "hsaban94-cc777",
+            storageBucket: "hsaban94-cc777.appspot.com",
+            messagingSenderId: "299206369469",
+            appId: "1:299206369469:web:50ca90c58f1981ec9457d4"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const messaging = getMessaging(app);
+
+        // NEW: Function to get permission and save the FCM token
+        async function setupPushNotifications() {
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    console.log('Push notification permission denied.');
+                    alert('כדי לקבל התראות על הזמנות חדשות, יש לאשר קבלת התראות בהגדרות הדפדפן.');
+                    return;
+                }
+
+                // Get your VAPID key from the Firebase console
+                const VAPID_KEY = "BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50";
+                const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+
+                if (currentToken) {
+                    console.log('Dashboard FCM token:', currentToken);
+                    // Save this token to Firestore in a new collection 'dashboardTokens'
+                    // The Cloud Function will read from this collection to send notifications.
+                    const tokenRef = doc(db, "dashboardTokens", currentToken);
+                    await setDoc(tokenRef, { createdAt: serverTimestamp() });
+                    console.log('Dashboard token saved to Firestore.');
+                } else {
+                    console.log('No registration token available. Request permission to generate one.');
+                }
+            } catch (err) {
+                console.error('An error occurred while setting up notifications:', err);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Setup push notifications as soon as the page loads
+            setupPushNotifications();
+
+            // The rest of the dashboard logic remains the same
+            const newRequestsContainer = document.getElementById('new-requests-container');
+            const inProgressContainer = document.getElementById('in-progress-container');
+            const completedContainer = document.getElementById('completed-container');
+            const newCountEl = document.getElementById('new-requests-count');
+            const inProgressCountEl = document.getElementById('in-progress-count');
+            const notificationSound = new Audio('https://freesound.org/data/previews/320/320662_5121236-lq.mp3');
+
+            function createRequestCard(request) {
+                const date = request.timestamp?.toDate().toLocaleString('he-IL') || 'זמן לא ידוע';
+                let actionsHtml = '';
+                if (request.status === 'new') {
+                    actionsHtml = `<button class="card-btn start" data-id="${request.id}">התחל טיפול</button>`;
+                } else if (request.status === 'in-progress') {
+                    actionsHtml = `<button class="card-btn complete" data-id="${request.id}">סיים טיפול</button>`;
+                }
+                return `
+                    <div class="kanban-card" id="card-${request.id}">
+                        <div class="card-header">
+                            <strong class="client-name">${request.clientName}</strong>
+                            <span class="timestamp">${date}</span>
+                        </div>
+                        <p>${request.requestType} (הזמנה ${request.orderId || ''})</p>
+                        <div class="card-footer">${actionsHtml}</div>
+                    </div>`;
+            }
+            
+            async function updateRequestStatus(id, newStatus) {
+                const requestRef = doc(db, "clientRequests", id);
+                await updateDoc(requestRef, { status: newStatus });
+            }
+
+            function listenToRequests() {
+                const q = query(collection(db, "clientRequests"), orderBy("timestamp", "desc"));
+                onSnapshot(q, (snapshot) => {
+                    newRequestsContainer.innerHTML = '';
+                    inProgressContainer.innerHTML = '';
+                    completedContainer.innerHTML = '';
+                    let newCount = 0, inProgressCount = 0;
+
+                    // This part is for the IN-PAGE sound/notification, not push notifications
+                    snapshot.docChanges().forEach((change) => {
+                        if (change.type === "added" && change.doc.data().status === 'new') {
+                            notificationSound.play();
+                        }
+                    });
+
+                    snapshot.forEach(doc => {
+                        const request = { id: doc.id, ...doc.data() };
+                        const cardHtml = createRequestCard(request);
+                        const today = new Date().setHours(0, 0, 0, 0);
+                        const requestDate = request.timestamp?.toDate().setHours(0, 0, 0, 0);
+
+                        if (request.status === 'new') {
+                            newRequestsContainer.innerHTML += cardHtml;
+                            newCount++;
+                        } else if (request.status === 'in-progress') {
+                            inProgressContainer.innerHTML += cardHtml;
+                            inProgressCount++;
+                        } else if (request.status === 'completed' && requestDate === today) {
+                            completedContainer.innerHTML += cardHtml;
+                        }
+                    });
+                    newCountEl.textContent = newCount;
+                    inProgressCountEl.textContent = inProgressCount;
+                });
+            }
+
+            // Listen for clicks on the action buttons
+            document.body.addEventListener('click', (event) => {
+                const target = event.target;
+                if (target.matches('.card-btn.start')) {
+                    updateRequestStatus(target.dataset.id, 'in-progress');
+                } else if (target.matches('.card-btn.complete')) {
+                    updateRequestStatus(target.dataset.id, 'completed');
+                }
+            });
+
+            // Start listening to real-time updates from Firestore
+            listenToRequests();
+            
+            // Listen for push notifications while the app is in the foreground
+            onMessage(messaging, (payload) => {
+                console.log('Foreground push message received. ', payload);
+                // Optionally show an in-app toast notification
+                alert(`בקשה חדשה: ${payload.notification.body}`);
+            });
+        });
+    </script>
+</body>
+</html>
+

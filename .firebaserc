@@ -1,0 +1,14 @@
+{
+"projects": {
+"default": "hsaban-644c5"
+},
+"targets": {
+"hsaban-644c5": {
+"hosting": {
+"hsaban94-cc777": [
+"hsaban94-cc777"
+]
+}
+}
+}
+}
