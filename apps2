@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>אזור אישי - ח.סבן</title>
+    <meta name="theme-color" content="#0b72b9"/>
+    <link rel="manifest" href="https://rami1125.github.io/a/manifest.json">
+    <link rel="apple-touch-icon" href="https://i.postimg.cc/2SbDgD1B/1.png">
+    <link rel="icon" href="https://i.postimg.cc/2SbDgD1B/1.png">
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* All CSS is now inside this style block */
+        :root {
+            --brand: #0b72b9; --accent: #ff9f1c; --bg: #f0f2f5; --card: #ffffff;
+            --text-dark: #1a202c; --text-light: #4a5568; --text-muted: #718096;
+            --border: #e2e8f0; --success: #38a169; --danger: #e53e3e;
+            --radius: 12px; --shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+        }
+        body {
+            font-family: 'Assistant', sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 0;
+            color: var(--text-dark);
+        }
+        #app-container { max-width: 800px; margin: 0 auto; padding: 15px; }
+        .loader { text-align: center; padding-top: 50px; font-size: 1.2rem; }
+        .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; padding: 20px; }
+        .header-card h1 { margin: 0; font-size: 1.8rem; }
+        .header-card p { margin: 5px 0 0; color: var(--text-light); font-size: 1.1rem; }
+        .actions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; text-align: center; }
+        .action-btn { background: var(--card); border-radius: var(--radius); padding: 20px 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border); }
+        .action-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .order-list .order-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid var(--border); }
+        .order-list .order-item:last-child { border-bottom: none; }
+        .status { padding: 4px 10px; border-radius: 20px; font-size: 0.9rem; font-weight: 600; }
+        .status.open { background-color: #e6fffa; color: #2c7a7b; }
+        .status.closed { background-color: #f1f2f6; color: #718096; }
+        button { background-color: var(--brand); color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 1rem; cursor: pointer; font-family: 'Assistant', sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <div class="loader">טוען נתונים...</div>
+    </div>
+
+    <script>
+        // All JavaScript is now inside this script block
+        (function() {
+            const dom = {
+                app: document.getElementById('app-container'),
+            };
+
+            const state = {
+                clientId: null,
+                clientName: '',
+                orders: [],
+            };
+
+            // --- API Communication ---
+            function api(action, payload) {
+                return new Promise((resolve, reject) => {
+                    google.script.run
+                        .withSuccessHandler(resolve)
+                        .withFailureHandler(reject)
+                        .doPost({ action, ...payload });
+                });
+            }
+
+            // --- Firebase Setup ---
+            function initializeFirebase() {
+                 const firebaseConfig = {
+                    apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
+                    authDomain: "hsaban94-cc777.firebaseapp.com",
+                    databaseURL: "https://hsaban94-cc777.firebaseio.com",
+                    projectId: "hsaban94-cc777",
+                    storageBucket: "hsaban94-cc777.firebasestorage.app",
+                    messagingSenderId: "299206369469",
+                    appId: "1:299206369469:web:6e8674eb787e52fa9457d4"
+                };
+                firebase.initializeApp(firebaseConfig);
+                const messaging = firebase.messaging();
+                requestNotificationPermission(messaging);
+            }
+
+            function requestNotificationPermission(messaging) {
+                messaging.requestPermission()
+                    .then(() => messaging.getToken())
+                    .then(token => {
+                        console.log('FCM Token:', token);
+                        return api('saveClientFCMToken', { clientId: state.clientId, token });
+                    })
+                    .then(() => console.log("Token saved successfully."))
+                    .catch(err => console.error('Notification permission error:', err));
+            }
+
+            // --- Rendering ---
+            function render() {
+                if (!state.clientName) {
+                    dom.app.innerHTML = `<div class="card"><h1>לקוח לא נמצא</h1><p>אנא ודא שהקישור שקיבלת תקין.</p></div>`;
+                    return;
+                }
+
+                const openOrders = state.orders.filter(o => o['סטטוס'] === 'פתוח');
+                const closedOrders = state.orders.filter(o => o['סטטוס'] !== 'פתוח');
+
+                dom.app.innerHTML = `
+                    <div class="card header-card">
+                        <h1>שלום, ${state.clientName}</h1>
+                        <p>ברוך הבא לאזור האישי שלך.</p>
+                    </div>
+
+                    <div class="card">
+                        <h2>פעולות מהירות</h2>
+                        <div class="actions-grid">
+                            <div class="action-btn" data-action="new-order">הזמנה חדשה</div>
+                            <div class="action-btn" data-action="chat">שלח הודעה</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>הזמנות פתוחות (${openOrders.length})</h2>
+                        <div class="order-list">
+                            ${openOrders.map(order => renderOrderItem(order)).join('') || '<p>אין הזמנות פתוחות.</p>'}
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2>היסטוריית הזמנות (${closedOrders.length})</h2>
+                        <div class="order-list">
+                            ${closedOrders.map(order => renderOrderItem(order)).join('') || '<p>אין היסטוריית הזמנות.</p>'}
+                        </div>
+                    </div>
+                `;
+            }
+
+            function renderOrderItem(order) {
+                const statusClass = order['סטטוס'] === 'פתוח' ? 'open' : 'closed';
+                return `
+                    <div class="order-item">
+                        <div>
+                            <strong>תעודה: ${order['תעודה']}</strong>
+                            <p style="margin:5px 0 0; color: var(--text-muted);">${order['כתובת']}</p>
+                        </div>
+                        <span class="status ${statusClass}">${order['סטטוס']}</span>
+                    </div>
+                `;
+            }
+
+            // --- Initialization ---
+            async function init() {
+                const params = new URLSearchParams(window.location.search);
+                state.clientId = params.get('c');
+
+                if (!state.clientId) {
+                    render();
+                    return;
+                }
+
+                try {
+                    const response = await api('getClientData', { identifier: state.clientId });
+                    if (response.success && response.data.length > 0) {
+                        state.orders = response.data;
+                        state.clientName = response.data[0]['שם לקוח'];
+                        initializeFirebase(); // Initialize Firebase only after we have the client ID
+                    }
+                } catch (error) {
+                    console.error("Failed to load client data:", error);
+                    dom.app.innerHTML = `<div class="card"><h1>שגיאה בטעינת נתונים</h1><p>נסה לרענן את הדף.</p></div>`;
+                }
+                render();
+            }
+
+            document.addEventListener('DOMContentLoaded', init);
+        })();
+    </script>
+</body>
+</html>
+
