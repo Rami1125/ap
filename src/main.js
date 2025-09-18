@@ -44,16 +44,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- NEW FUNCTION TO SAVE CLIENT'S TOKEN ---
+    // --- UPDATED FUNCTION TO SAVE CLIENT'S TOKEN WITH BETTER ERROR HANDLING ---
     async function saveTokenToFirestore(token, clientId) {
-        if (!token || !clientId) return;
+        if (!token || !clientId) {
+            console.log("Token or Client ID is missing, cannot save.");
+            return;
+        }
         try {
-            // We create a new collection 'clients' to store profiles and tokens
             const clientRef = doc(db, 'clients', clientId);
             await setDoc(clientRef, { fcmToken: token, lastSeen: serverTimestamp() }, { merge: true });
-            console.log('FCM Token saved for client:', clientId);
+            console.log('SUCCESS: FCM Token was saved to Firestore for client:', clientId);
         } catch (error) {
-            console.error('Error saving client FCM token:', error);
+            console.error('!!! FIRESTORE ERROR while saving FCM token:', error);
+            // Show a non-blocking toast to the user so they are aware of the issue.
+            showToast("שגיאה ברישום להתראות. ייתכן שלא תקבל עדכונים.", '⚠️');
         }
     }
 
@@ -63,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
                 console.log('Notifications permission not granted by client.');
+                showToast("לא אישרת קבלת התראות.", 'ℹ️');
                 return null;
             }
 
@@ -70,8 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
 
             if (currentToken && clientState.id) {
-                console.log('Got Client FCM token:', currentToken);
-                // Call the new function to save the token to the client's document
+                console.log('Got Client FCM token, attempting to save to Firestore:', currentToken);
                 await saveTokenToFirestore(currentToken, clientState.id);
             } else if (!clientState.id) {
                  console.log('Client not logged in, cannot save token yet.');
@@ -81,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return currentToken;
         } catch (err) {
             console.error('An error occurred while retrieving client token. ', err);
+            showToast("שגיאה בקבלת מזהה התראות.", '❌');
             return null;
         }
     }
@@ -140,4 +145,3 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupEventListeners(){dom.body.addEventListener("click",e=>{const t=e.target.closest("[data-action]");if(!t){e.target.closest("#profile-container")||dom.profileContainer.classList.remove("active");e.target.classList.contains("modal-overlay")&&e.target.classList.remove("show");return}const o=t.dataset.action;switch(o){case"navigate":navigateTo(t.dataset.page);break;case"help-fab":dom.helpModal.classList.add("show");break;case"help-close":dom.helpModal.classList.remove("show");break;case"toggle-profile":dom.profileContainer.classList.toggle("active");break;case"logout":localStorage.clear();window.location.reload();break;case"new-order":openOrderModal("הזמנה חדשה");break;case"chat-template":document.getElementById("chat-message").value=t.textContent;break;case"refresh-data":if(clientState.id){const e=t;e.style.transition="transform 0.5s ease";e.style.transform="rotate(360deg)";e.disabled=!0;showToast("מרענן נתונים...","🔄");loadClientData(clientState.id,!0).then(()=>{showToast("הנתונים עודכנו!","✅")}).catch(e=>{console.error("Refresh failed:",e);showToast("שגיאה ברענון הנתונים","❌")}).finally(()=>{setTimeout(()=>{e.style.transition="";e.style.transform="";e.disabled=!1},500)})}break;case"filter-history":renderHistoryPage(t.dataset.project);break;case"show-history-details":const e=clientState.orders.find(e=>e["תעודה"]==t.dataset.orderId);openHistoryDetailModal(e);break;case"request-swap":case"request-pickup":{const e=t.dataset.orderId,n=clientState.orders.find(t=>t["תעודה"]==e);n&&openOrderModal("request-swap"===o?"החלפה":"פינוי",n);break}}});dom.body.addEventListener("submit",e=>{if("chat-form"===e.target.id){e.preventDefault();const t=document.getElementById("chat-message");t.value.trim()&&(sendClientRequest("הודעת צאט",t.value.trim()),t.value="")}})}
     initApp();
 });
-
