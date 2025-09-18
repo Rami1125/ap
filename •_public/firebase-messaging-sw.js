@@ -1,9 +1,9 @@
-// This file must be in the public folder
+// Scripts for Firebase products are imported using the importScripts() method.
+// Note: Use the 'compat' versions for service workers.
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
-// Scripts for Firebase products are imported using the importScripts() method
-importScripts('[https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js](https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js)');
-importScripts('[https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js](https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js)');
-
+// Your web app's Firebase configuration
 const firebaseConfig = {
     apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
     authDomain: "hsaban94-cc777.firebaseapp.com",
@@ -13,17 +13,18 @@ const firebaseConfig = {
     appId: "1:299206369469:web:50ca90c58f1981ec9457d4"
 };
 
-const app = firebase.initializeApp(firebaseConfig);
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// This listener handles messages when the app is in the background or closed
+// This listener handles messages when the app is in the background or closed.
 messaging.onBackgroundMessage(function(payload) {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
 
-    const notificationTitle = payload.notification.title;
+    const notificationTitle = payload.notification.title || 'התראה חדשה';
     const notificationOptions = {
         body: payload.notification.body,
-        icon: payload.notification.icon,
+        icon: 'https://i.postimg.cc/2SbDgD1B/1.png', // A default icon
     };
 
     return self.registration.showNotification(notificationTitle, notificationOptions);
