@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const completedContainer = document.getElementById('completed-container');
     const newCountEl = document.getElementById('new-requests-count');
     const inProgressCountEl = document.getElementById('in-progress-count');
-    const notificationSound = new Audio('https://freesound.org/data/previews/320/320662_5121236-lq.mp3');
+    const notificationSound = new Audio('https://voca.ro/14ffGFqolbfb');
     
     async function setupPushNotifications() {
         try {
