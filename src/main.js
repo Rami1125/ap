@@ -29,17 +29,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const dom = {};
 
     function initApp() {
-        cacheDomElements();
-        updateClock();
-        setInterval(updateClock, 1000);
-        
-        const storedClientId = localStorage.getItem('saban_client_id');
-        if (storedClientId) {
-            dom.splashScreen.classList.add('loading');
-            loadClientData(storedClientId);
-        } else {
-            dom.splashScreen.style.display = 'none';
-            promptForClientId();
+        try {
+            const elementsReady = cacheDomElements();
+            if (!elementsReady) {
+                // Stop initialization if critical elements are missing
+                document.body.innerHTML = `<div style="padding: 20px; text-align: center; font-family: Assistant, sans-serif;"><h1>שגיאת טעינה</h1><p>רכיבים חיוניים חסרים במבנה הדף. לא ניתן להפעיל את האפליקציה.</p><p>אנא בדוק את הקונסול (F12) לקבלת פרטים טכניים.</p></div>`;
+                document.body.style.visibility = 'visible';
+                return;
+            }
+
+            updateClock();
+            setInterval(updateClock, 1000);
+            
+            const storedClientId = localStorage.getItem('saban_client_id');
+            if (storedClientId) {
+                if (dom.splashScreen) dom.splashScreen.classList.add('loading');
+                loadClientData(storedClientId);
+            } else {
+                if (dom.splashScreen) dom.splashScreen.style.display = 'none';
+                promptForClientId();
+            }
+        } catch (error) {
+            console.error("A critical error occurred during app initialization:", error);
+            document.body.innerHTML = `<div style="padding: 20px; text-align: center; font-family: Assistant, sans-serif;"><h1>אפליקציה נתקלה בשגיאה</h1><p>נא לנסות לרענן את הדף. אם הבעיה נמשכת, אנא צור קשר.</p><pre style="text-align: left; background: #eee; padding: 10px; border-radius: 5px; white-space: pre-wrap;">${error.stack}</pre></div>`;
+            document.body.style.visibility = 'visible';
         }
     }
 
@@ -230,8 +243,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- UTILITY & HELPER FUNCTIONS ---
-    function cacheDomElements(){
-        Object.assign(dom, {
+    function cacheDomElements() {
+        console.log("Caching DOM elements...");
+        const elements = {
             appShell: document.querySelector('.app-shell'),
             splashScreen: document.getElementById('splash-screen'),
             pages: document.querySelectorAll('.page'),
@@ -256,7 +270,25 @@ document.addEventListener('DOMContentLoaded', () => {
             addLocationBtn: document.getElementById('add-location-btn'),
             materialsSummary: document.getElementById('materials-summary'),
             submitMaterialOrderBtn: document.getElementById('submit-material-order-btn')
-        });
+        };
+    
+        let allFound = true;
+        for (const key in elements) {
+            // Check for single element, or NodeList with items
+            if (!elements[key] || (NodeList.prototype.isPrototypeOf(elements[key]) && elements[key].length === 0)) {
+                console.error(`DOM Caching Error: Element "${key}" not found.`);
+                allFound = false;
+            }
+        }
+    
+        if (!allFound) {
+            console.error("Critical DOM elements are missing. App cannot start.");
+            return false; // Indicate failure
+        }
+    
+        Object.assign(dom, elements);
+        console.log("All DOM elements cached successfully.");
+        return true; // Indicate success
     }
     
     function setupEventListeners() {
@@ -359,7 +391,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateClock() { const n = new Date(); dom.clock.textContent = n.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }); dom.date.textContent = n.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }); }
     function showToast(message, icon = 'ℹ️') { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<span>${icon}</span> <span>${message}</span>`; dom.toastContainer.appendChild(t); setTimeout(() => t.classList.add('show'), 10); setTimeout(() => { t.classList.remove('show'); t.addEventListener('transitionend', () => t.remove()); }, 3000); }
     async function requestNotificationPermission() { try { const p = await Notification.requestPermission(); if (p !== 'granted') return; const t = await getToken(messaging, { vapidKey: "BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50" }); if (t && clientState.id) saveTokenToFirestore(t, clientState.id); } catch (e) { console.error('Error getting token', e); } }
-    async function saveTokenToFirestore(token, clientId) { try { await setDoc(doc(db, 'clients', clientId), { fcmToken: token }, { merge: true }); } catch (e) { console.error('Error saving token', e); } }
+    
+    async function saveTokenToFirestore(token, clientId) {
+        console.log(`Attempting to save token for client ${clientId}:`, token);
+        try {
+            await setDoc(doc(db, 'clients', clientId), { fcmToken: token, lastUpdated: serverTimestamp() }, { merge: true });
+            console.log(`%cSUCCESS: FCM Token was saved for client ${clientId}`, "color: green; font-weight: bold;");
+        } catch (error) {
+            console.error(`%cERROR: Failed to save FCM Token for client ${clientId}. Error:`, "color: red; font-weight: bold;", error);
+            showToast("שגיאה ברישום לקבלת התראות", '❌');
+        }
+    }
     onMessage(messaging, (payload) => { showToast(payload.notification.body, '🔔'); });
 
     initApp();
