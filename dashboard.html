@@ -180,8 +180,39 @@
                 toastContainer: document.getElementById('toast-container'),
             };
 
-            const notificationSound = new Audio('https://freesound.org/data/previews/320/320662_5121236-lq.mp3');
             let managerName = sessionStorage.getItem('managerName');
+            let userHasInteracted = false;
+            let audioCtx;
+
+            // --- Sound and Interaction Logic ---
+            function playNotificationSound() {
+                if (!userHasInteracted) return; // Wait for user interaction
+                try {
+                    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const oscillator = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+                    
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+                    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // Lower volume
+                    
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.2); // Play for 0.2 seconds
+                } catch (e) {
+                    console.error("Could not play sound:", e);
+                }
+            }
+            
+            document.body.addEventListener('click', () => {
+                if (!userHasInteracted) {
+                    userHasInteracted = true;
+                    // Initialize AudioContext after first click
+                    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }, { once: true });
+
 
             // --- Manager Identification ---
             function identifyManager() {
@@ -213,7 +244,7 @@
                     }
                 } catch (err) {
                     console.error('Error setting up notifications:', err);
-                    showToast('שגיאה בהגדרת התראות Push', '❌');
+                    showToast('שגיאה ברישום התראות Push (ייתכן שקובץ sw חסר)', '❌');
                 }
             }
             
@@ -257,8 +288,6 @@
                 const requestRef = doc(db, "clientRequests", id);
                 try {
                     await updateDoc(requestRef, data);
-                    // This function now triggers a Cloud Function that sends a notification to the client.
-                    // Ensure your 'notifyClientOnStatusChange' function is updated to handle 'handledBy' and 'eta' fields.
                 } catch (error) {
                     console.error("Error updating request: ", error);
                     showToast(`שגיאה בעדכון בקשה ${id}`, '❌');
@@ -278,7 +307,7 @@
                     // Detect new requests for sound/notification
                     snapshot.docChanges().forEach((change) => {
                         if (change.type === "added" && change.doc.data().status === 'new') {
-                            notificationSound.play();
+                            playNotificationSound();
                             showToast(`בקשה חדשה התקבלה מ: ${change.doc.data().clientName}`, '🔔');
                         }
                     });
@@ -380,3 +409,4 @@
     </script>
 </body>
 </html>
+
