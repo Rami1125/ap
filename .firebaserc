@@ -1,10 +1,14 @@
+{
+"projects": {
+"default": "hsaban-644c5"
+},
+"targets": {
+"hsaban-644c5": {
 "hosting": {
-  "target": "hsaban94-cc777",
-  "public": "_public",
-  "ignore": [
-    "firebase.json",
-    "**/.*",
-    "**/node_modules/**",
-    "functions"
-  ]
+"hsaban94-cc777": [
+"hsaban94-cc777"
+]
+}
+}
+}
 }
