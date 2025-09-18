@@ -106,47 +106,56 @@ document.addEventListener('DOMContentLoaded', () => {
     function listenToRequests() {
         const q = query(collection(db, "clientRequests"), orderBy("timestamp", "desc"));
 
-        onSnapshot(q, (snapshot) => {
-            newRequestsContainer.innerHTML = '';
-            inProgressContainer.innerHTML = '';
-            completedContainer.innerHTML = '';
-            let newCount = 0;
-            let inProgressCount = 0;
+        onSnapshot(q, 
+            (snapshot) => {
+                // This is the SUCCESS callback
+                console.log(`Successfully fetched ${snapshot.size} requests.`);
+                newRequestsContainer.innerHTML = '';
+                inProgressContainer.innerHTML = '';
+                completedContainer.innerHTML = '';
+                let newCount = 0;
+                let inProgressCount = 0;
 
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === "added" && change.doc.data().status === 'new') {
-                    notificationSound.play();
-                    if (Notification.permission === "granted") {
-                        new Notification("בקשה חדשה התקבלה!", {
-                            body: `מאת: ${change.doc.data().clientName}`,
-                            icon: "https://i.postimg.cc/2SbDgD1B/1.png"
-                        });
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === "added" && change.doc.data().status === 'new') {
+                        notificationSound.play();
+                        if (Notification.permission === "granted") {
+                            new Notification("בקשה חדשה התקבלה!", {
+                                body: `מאת: ${change.doc.data().clientName}`,
+                                icon: "https://i.postimg.cc/2SbDgD1B/1.png"
+                            });
+                        }
                     }
-                }
-            });
+                });
 
-            snapshot.forEach(doc => {
-                const request = { id: doc.id, ...doc.data() };
-                const cardHtml = createRequestCard(request);
-                
-                if (request.status === 'new') {
-                    newRequestsContainer.innerHTML += cardHtml;
-                    newCount++;
-                } else if (request.status === 'in-progress') {
-                    inProgressContainer.innerHTML += cardHtml;
-                    inProgressCount++;
-                } else if (request.status === 'completed') {
-                    const today = new Date().setHours(0, 0, 0, 0);
-                    const requestDate = request.timestamp?.toDate().setHours(0, 0, 0, 0);
-                    if (requestDate === today) {
-                        completedContainer.innerHTML += cardHtml;
+                snapshot.forEach(doc => {
+                    const request = { id: doc.id, ...doc.data() };
+                    const cardHtml = createRequestCard(request);
+                    
+                    if (request.status === 'new') {
+                        newRequestsContainer.innerHTML += cardHtml;
+                        newCount++;
+                    } else if (request.status === 'in-progress') {
+                        inProgressContainer.innerHTML += cardHtml;
+                        inProgressCount++;
+                    } else if (request.status === 'completed') {
+                        const today = new Date().setHours(0, 0, 0, 0);
+                        const requestDate = request.timestamp?.toDate().setHours(0, 0, 0, 0);
+                        if (requestDate === today) {
+                            completedContainer.innerHTML += cardHtml;
+                        }
                     }
-                }
-            });
+                });
 
-            newCountEl.textContent = newCount;
-            inProgressCountEl.textContent = inProgressCount;
-        });
+                newCountEl.textContent = newCount;
+                inProgressCountEl.textContent = inProgressCount;
+            },
+            (error) => {
+                // This is the NEW ERROR callback
+                console.error("Firestore listen failed: ", error);
+                alert("שגיאה בקבלת נתונים מ-Firestore. בדוק את ה-Console (F12) לקבלת פרטים נוספים. ייתכן שאין הרשאות קריאה.");
+            }
+        );
     }
 
     document.body.addEventListener('click', (event) => {
@@ -163,4 +172,3 @@ document.addEventListener('DOMContentLoaded', () => {
     setupPushNotifications();
     listenToRequests();
 });
-
