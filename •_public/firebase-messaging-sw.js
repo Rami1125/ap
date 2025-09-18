@@ -1,5 +1,4 @@
 // Scripts for Firebase products are imported using the importScripts() method.
-// Note: Use the 'compat' versions for service workers.
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
@@ -21,12 +20,24 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(function(payload) {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
 
-    const notificationTitle = payload.notification.title || 'התראה חדשה';
+    const notificationTitle = payload.notification.title;
     const notificationOptions = {
         body: payload.notification.body,
-        icon: 'https://i.postimg.cc/2SbDgD1B/1.png', // A default icon
+        icon: payload.notification.icon || 'https://i.postimg.cc/2SbDgD1B/1.png',
+        data: {
+            url: payload.fcmOptions.link // Pass the link from the notification data
+        }
     };
 
     return self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+// Optional: Handle notification click
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close();
+    const urlToOpen = event.notification.data.url || '/';
+    event.waitUntil(
+        clients.openWindow(urlToOpen)
+    );
 });
 
