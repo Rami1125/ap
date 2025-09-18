@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>לוח בקרה - מחלקת הזמנות</title>
+    <title>לוח בקרה מתקדם - מחלקת הזמנות</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
@@ -13,36 +13,98 @@
             --text-dark: #1a202c; --text-light: #4a5568; --text-muted: #718096;
             --border: #e2e8f0; --success: #38a169; --warning: #dd6b20; --danger: #e53e3e;
             --radius: 12px; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Assistant', sans-serif; background-color: var(--bg); color: var(--text-dark); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+        body { 
+            font-family: 'Assistant', sans-serif; background-color: var(--bg); color: var(--text-dark);
+            overscroll-behavior-y: contain; visibility: hidden;
+        }
+        body.loaded { visibility: visible; }
+
         .dashboard-container { display: flex; flex-direction: column; height: 100vh; padding: 20px; }
-        .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;}
         .dashboard-header h1 { font-size: 28px; }
-        .stats-container { display: flex; gap: 25px; }
+        .stats-container { display: flex; gap: 25px; align-items: center; }
         .stat-item { display: flex; align-items: center; gap: 10px; font-weight: 600; }
-        .stat-count { font-size: 20px; font-weight: 700; }
-        .kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; flex-grow: 1; overflow: hidden; }
-        .kanban-column { background-color: #e9ecef; border-radius: var(--radius); display: flex; flex-direction: column; }
-        .column-title { font-size: 18px; padding: 15px; border-bottom: 2px solid var(--border); }
+        .stat-count { font-size: 20px; font-weight: 700; background-color: var(--card); padding: 2px 10px; border-radius: 20px;}
+        #manager-name-display { font-size: 14px; color: var(--text-muted); background-color: var(--card); padding: 5px 12px; border-radius: 8px; }
+
+        .kanban-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; flex-grow: 1; overflow: hidden; }
+        .kanban-column { background-color: #e9ecef; border-radius: var(--radius); display: flex; flex-direction: column; animation: fadeIn 0.5s ease-out; }
+        .column-title { display: flex; align-items: center; gap: 8px; font-size: 18px; padding: 15px; border-bottom: 2px solid var(--border); }
         .column-content { padding: 15px; overflow-y: auto; flex-grow: 1; }
-        .kanban-card { background-color: var(--card); border-radius: var(--radius); padding: 15px; box-shadow: var(--shadow); margin-bottom: 15px; }
-        .card-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
-        .client-name { font-weight: 700; }
+
+        .kanban-card { 
+            background-color: var(--card); border-radius: var(--radius); padding: 15px; 
+            box-shadow: var(--shadow); margin-bottom: 15px; transition: var(--transition);
+            border-left: 5px solid transparent;
+        }
+        .kanban-card[data-status="new"] { border-left-color: var(--accent); }
+        .kanban-card[data-status="in-progress"] { border-left-color: var(--brand); }
+        .kanban-card[data-status="completed"] { border-left-color: var(--success); }
+        .kanban-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .card-header { display: flex; justify-content: space-between; margin-bottom: 12px; }
+        .client-name { font-weight: 700; font-size: 1.1rem; }
         .timestamp { font-size: 12px; color: var(--text-muted); }
-        .card-footer { display: flex; justify-content: flex-end; margin-top: 15px; }
-        .card-btn { border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; color: white; }
+        .card-details { margin-bottom: 15px; color: var(--text-light); }
+        .eta-display { font-size: 14px; font-weight: 600; color: var(--brand); margin-top: 10px; }
+        .handled-by { font-size: 12px; color: var(--text-muted); margin-top: 10px; font-style: italic; }
+        .card-footer { display: flex; justify-content: flex-end; margin-top: 15px; gap: 10px; }
+        
+        .card-btn { 
+            border: none; padding: 8px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; 
+            color: white; transition: var(--transition);
+        }
+        .card-btn:hover { filter: brightness(1.1); }
         .card-btn.start { background-color: var(--brand); }
+        .card-btn.eta { background-color: var(--accent); }
         .card-btn.complete { background-color: var(--success); }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); display: flex;
+            align-items: center; justify-content: center; z-index: 1000;
+            opacity: 0; visibility: hidden; transition: var(--transition); backdrop-filter: blur(4px);
+        }
+        .modal-overlay.show { opacity: 1; visibility: visible; }
+        .modal-content {
+            background: var(--card); padding: 25px; border-radius: var(--radius);
+            width: 90%; max-width: 400px; animation: popIn 0.3s ease-out;
+        }
+        .modal-content h3 { margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; }
+        .form-group input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); font-family: 'Assistant', sans-serif; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-actions button { flex: 1; }
+
+        /* Toast Notifications */
+        #toast-container {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 2000; display: flex; flex-direction: column; gap: 10px; align-items: center;
+        }
+        .toast {
+            display: flex; align-items: center; gap: 12px;
+            background: var(--card); color: var(--text-dark); padding: 14px 22px;
+            border-radius: var(--radius); font-weight: 600; box-shadow: var(--shadow);
+            opacity: 0; transform: translateY(-20px); transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
     </style>
 </head>
 <body>
+    <!-- Main App Container -->
     <div class="dashboard-container">
         <header class="dashboard-header">
-            <h1>לוח בקרה - מחלקת הזמנות</h1>
+            <h1>לוח בקרה מתקדם</h1>
             <div class="stats-container">
-                <div class="stat-item"><span>בקשות חדשות:</span><span class="stat-count" id="new-requests-count">0</span></div>
-                <div class="stat-item"><span>בטיפול:</span><span class="stat-count" id="in-progress-count">0</span></div>
+                <div class="stat-item"><span class="stat-count" id="new-requests-count">0</span><span>בקשות חדשות</span></div>
+                <div class="stat-item"><span class="stat-count" id="in-progress-count">0</span><span>בטיפול</span></div>
+                <div id="manager-name-display">לא מחובר</div>
             </div>
         </header>
         <main class="kanban-board">
@@ -52,11 +114,38 @@
         </main>
     </div>
 
+    <!-- ETA Modal -->
+    <div id="eta-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>קביעת צפי הגעה</h3>
+            <form id="eta-form">
+                <input type="hidden" id="eta-request-id">
+                <div class="form-group">
+                    <label for="eta-date">תאריך הגעה</label>
+                    <input type="date" id="eta-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="eta-time">שעת הגעה</label>
+                    <input type="time" id="eta-time" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="card-btn" style="background-color: var(--text-muted);" id="modal-close-btn">ביטול</button>
+                    <button type="submit" class="card-btn" style="background-color: var(--brand);">שלח עדכון ללקוח</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
     <script type="module">
+        // Firebase Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+        import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
+        // Firebase Config
         const firebaseConfig = {
             apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
             authDomain: "hsaban94-cc777.firebaseapp.com",
@@ -65,132 +154,229 @@
             messagingSenderId: "299206369469",
             appId: "1:299206369469:web:50ca90c58f1981ec9457d4"
         };
+
+        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const messaging = getMessaging(app);
 
-        // NEW: Function to get permission and save the FCM token
-        async function setupPushNotifications() {
-            try {
-                const permission = await Notification.requestPermission();
-                if (permission !== 'granted') {
-                    console.log('Push notification permission denied.');
-                    alert('כדי לקבל התראות על הזמנות חדשות, יש לאשר קבלת התראות בהגדרות הדפדפן.');
-                    return;
-                }
-
-                // Get your VAPID key from the Firebase console
-                const VAPID_KEY = "BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50";
-                const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
-
-                if (currentToken) {
-                    console.log('Dashboard FCM token:', currentToken);
-                    // Save this token to Firestore in a new collection 'dashboardTokens'
-                    // The Cloud Function will read from this collection to send notifications.
-                    const tokenRef = doc(db, "dashboardTokens", currentToken);
-                    await setDoc(tokenRef, { createdAt: serverTimestamp() });
-                    console.log('Dashboard token saved to Firestore.');
-                } else {
-                    console.log('No registration token available. Request permission to generate one.');
-                }
-            } catch (err) {
-                console.error('An error occurred while setting up notifications:', err);
-            }
-        }
-
         document.addEventListener('DOMContentLoaded', () => {
-            // Setup push notifications as soon as the page loads
-            setupPushNotifications();
+            document.body.classList.add('loaded');
 
-            // The rest of the dashboard logic remains the same
-            const newRequestsContainer = document.getElementById('new-requests-container');
-            const inProgressContainer = document.getElementById('in-progress-container');
-            const completedContainer = document.getElementById('completed-container');
-            const newCountEl = document.getElementById('new-requests-count');
-            const inProgressCountEl = document.getElementById('in-progress-count');
+            // --- DOM Elements ---
+            const dom = {
+                newRequestsContainer: document.getElementById('new-requests-container'),
+                inProgressContainer: document.getElementById('in-progress-container'),
+                completedContainer: document.getElementById('completed-container'),
+                newCountEl: document.getElementById('new-requests-count'),
+                inProgressCountEl: document.getElementById('in-progress-count'),
+                managerNameDisplay: document.getElementById('manager-name-display'),
+                etaModal: document.getElementById('eta-modal'),
+                etaForm: document.getElementById('eta-form'),
+                etaRequestId: document.getElementById('eta-request-id'),
+                etaDate: document.getElementById('eta-date'),
+                etaTime: document.getElementById('eta-time'),
+                modalCloseBtn: document.getElementById('modal-close-btn'),
+                toastContainer: document.getElementById('toast-container'),
+            };
+
             const notificationSound = new Audio('https://freesound.org/data/previews/320/320662_5121236-lq.mp3');
+            let managerName = sessionStorage.getItem('managerName');
 
+            // --- Manager Identification ---
+            function identifyManager() {
+                if (!managerName) {
+                    managerName = prompt("אנא הזן את שמך לצורך זיהוי אישי:", "מנהל");
+                    if (managerName && managerName.trim() !== '') {
+                        sessionStorage.setItem('managerName', managerName);
+                    } else {
+                        managerName = "מנהל המערכת"; // Fallback
+                    }
+                }
+                dom.managerNameDisplay.textContent = `מחובר: ${managerName}`;
+            }
+
+            // --- Push Notifications Setup ---
+            async function setupPushNotifications() {
+                try {
+                    const permission = await Notification.requestPermission();
+                    if (permission !== 'granted') {
+                        showToast('יש לאשר קבלת התראות כדי לקבל עדכונים', '⚠️');
+                        return;
+                    }
+                    const VAPID_KEY = "BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50";
+                    const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+                    if (currentToken) {
+                        const tokenRef = doc(db, "dashboardTokens", currentToken);
+                        await setDoc(tokenRef, { managerName: managerName, createdAt: serverTimestamp() });
+                        console.log('Dashboard token saved for manager:', managerName);
+                    }
+                } catch (err) {
+                    console.error('Error setting up notifications:', err);
+                    showToast('שגיאה בהגדרת התראות Push', '❌');
+                }
+            }
+            
+            // --- UI Rendering ---
             function createRequestCard(request) {
-                const date = request.timestamp?.toDate().toLocaleString('he-IL') || 'זמן לא ידוע';
+                const date = request.timestamp?.toDate().toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) || 'זמן לא ידוע';
+                
                 let actionsHtml = '';
                 if (request.status === 'new') {
                     actionsHtml = `<button class="card-btn start" data-id="${request.id}">התחל טיפול</button>`;
                 } else if (request.status === 'in-progress') {
-                    actionsHtml = `<button class="card-btn complete" data-id="${request.id}">סיים טיפול</button>`;
+                    actionsHtml = `
+                        <button class="card-btn eta" data-id="${request.id}">קבע צפי הגעה</button>
+                        <button class="card-btn complete" data-id="${request.id}">סיים טיפול</button>
+                    `;
                 }
+
+                const etaInfo = request.etaDate && request.etaTime
+                    ? `<div class="eta-display">ETA: ${new Date(request.etaDate).toLocaleDateString('he-IL')} ${request.etaTime}</div>`
+                    : '';
+                
+                const handledByInfo = request.handledBy
+                    ? `<div class="handled-by">מטופל ע"י: ${request.handledBy}</div>`
+                    : '';
+
                 return `
-                    <div class="kanban-card" id="card-${request.id}">
+                    <div class="kanban-card" id="card-${request.id}" data-status="${request.status}">
                         <div class="card-header">
                             <strong class="client-name">${request.clientName}</strong>
                             <span class="timestamp">${date}</span>
                         </div>
-                        <p>${request.requestType} (הזמנה ${request.orderId || ''})</p>
+                        <p class="card-details"><strong>${request.requestType}:</strong> ${request.details || 'אין פירוט'}</p>
+                        ${etaInfo}
+                        ${handledByInfo}
                         <div class="card-footer">${actionsHtml}</div>
                     </div>`;
             }
-            
-            async function updateRequestStatus(id, newStatus) {
+
+            // --- Firestore Logic ---
+            async function updateRequest(id, data) {
                 const requestRef = doc(db, "clientRequests", id);
-                await updateDoc(requestRef, { status: newStatus });
+                try {
+                    await updateDoc(requestRef, data);
+                    // This function now triggers a Cloud Function that sends a notification to the client.
+                    // Ensure your 'notifyClientOnStatusChange' function is updated to handle 'handledBy' and 'eta' fields.
+                } catch (error) {
+                    console.error("Error updating request: ", error);
+                    showToast(`שגיאה בעדכון בקשה ${id}`, '❌');
+                }
             }
 
+            // --- Real-time Listener ---
             function listenToRequests() {
                 const q = query(collection(db, "clientRequests"), orderBy("timestamp", "desc"));
                 onSnapshot(q, (snapshot) => {
-                    newRequestsContainer.innerHTML = '';
-                    inProgressContainer.innerHTML = '';
-                    completedContainer.innerHTML = '';
+                    // Reset containers
+                    dom.newRequestsContainer.innerHTML = '';
+                    dom.inProgressContainer.innerHTML = '';
+                    dom.completedContainer.innerHTML = '';
                     let newCount = 0, inProgressCount = 0;
 
-                    // This part is for the IN-PAGE sound/notification, not push notifications
+                    // Detect new requests for sound/notification
                     snapshot.docChanges().forEach((change) => {
                         if (change.type === "added" && change.doc.data().status === 'new') {
                             notificationSound.play();
+                            showToast(`בקשה חדשה התקבלה מ: ${change.doc.data().clientName}`, '🔔');
                         }
                     });
 
+                    // Distribute all cards to columns
                     snapshot.forEach(doc => {
                         const request = { id: doc.id, ...doc.data() };
                         const cardHtml = createRequestCard(request);
-                        const today = new Date().setHours(0, 0, 0, 0);
-                        const requestDate = request.timestamp?.toDate().setHours(0, 0, 0, 0);
-
+                        
                         if (request.status === 'new') {
-                            newRequestsContainer.innerHTML += cardHtml;
+                            dom.newRequestsContainer.innerHTML += cardHtml;
                             newCount++;
                         } else if (request.status === 'in-progress') {
-                            inProgressContainer.innerHTML += cardHtml;
+                            dom.inProgressContainer.innerHTML += cardHtml;
                             inProgressCount++;
-                        } else if (request.status === 'completed' && requestDate === today) {
-                            completedContainer.innerHTML += cardHtml;
+                        } else if (request.status === 'completed') {
+                            const today = new Date().setHours(0, 0, 0, 0);
+                            const requestDate = request.timestamp?.toDate().setHours(0, 0, 0, 0);
+                            if (requestDate === today) {
+                                dom.completedContainer.innerHTML += cardHtml;
+                            }
                         }
                     });
-                    newCountEl.textContent = newCount;
-                    inProgressCountEl.textContent = inProgressCount;
+
+                    // Update counters
+                    dom.newCountEl.textContent = newCount;
+                    dom.inProgressCountEl.textContent = inProgressCount;
+                }, (error) => {
+                    console.error("Firestore listener error: ", error);
+                    showToast("שגיאת התחברות למסד הנתונים.", '❌');
                 });
             }
 
-            // Listen for clicks on the action buttons
+            // --- Modals and UI Helpers ---
+            function openEtaModal(requestId) {
+                dom.etaRequestId.value = requestId;
+                dom.etaModal.classList.add('show');
+            }
+
+            function closeModal() {
+                dom.etaModal.classList.remove('show');
+                dom.etaForm.reset();
+            }
+            
+            function showToast(message, icon = 'ℹ️') {
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+                dom.toastContainer.appendChild(toast);
+                setTimeout(() => toast.classList.add('show'), 10);
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                    toast.addEventListener('transitionend', () => toast.remove());
+                }, 4000);
+            }
+
+            // --- Event Listeners ---
             document.body.addEventListener('click', (event) => {
                 const target = event.target;
                 if (target.matches('.card-btn.start')) {
-                    updateRequestStatus(target.dataset.id, 'in-progress');
+                    const id = target.dataset.id;
+                    updateRequest(id, { status: 'in-progress', handledBy: managerName });
+                    showToast('הבקשה עברה לטיפול', '🧑‍💻');
                 } else if (target.matches('.card-btn.complete')) {
-                    updateRequestStatus(target.dataset.id, 'completed');
+                    const id = target.dataset.id;
+                    updateRequest(id, { status: 'completed' });
+                    showToast('הבקשה הושלמה בהצלחה', '✅');
+                } else if (target.matches('.card-btn.eta')) {
+                    openEtaModal(target.dataset.id);
                 }
             });
 
-            // Start listening to real-time updates from Firestore
-            listenToRequests();
-            
-            // Listen for push notifications while the app is in the foreground
-            onMessage(messaging, (payload) => {
-                console.log('Foreground push message received. ', payload);
-                // Optionally show an in-app toast notification
-                alert(`בקשה חדשה: ${payload.notification.body}`);
+            dom.modalCloseBtn.addEventListener('click', closeModal);
+            dom.etaModal.addEventListener('click', (e) => {
+                if (e.target === dom.etaModal) closeModal();
             });
+
+            dom.etaForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = dom.etaRequestId.value;
+                const etaData = {
+                    etaDate: dom.etaDate.value,
+                    etaTime: dom.etaTime.value
+                };
+                updateRequest(id, etaData);
+                showToast(`צפי הגעה נשלח ללקוח!`, '🚚');
+                closeModal();
+            });
+
+            // --- App Initialization ---
+            function init() {
+                identifyManager();
+                setupPushNotifications();
+                listenToRequests();
+            }
+
+            init();
         });
     </script>
 </body>
 </html>
-
