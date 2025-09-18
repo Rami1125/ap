@@ -1,4 +1,4 @@
-// STEP 1: Import all necessary Firebase modules at the very top
+// STEP 1: Import all necessary Firebase modules
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
@@ -14,7 +14,7 @@ const firebaseConfig = {
     appId: "1:299206369469:web:50ca90c58f1981ec9457d4"
 };
 
-// STEP 3: Initialize Firebase and other services
+// STEP 3: Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const messaging = getMessaging(app);
@@ -24,9 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.add('loaded');
 
     const API_URL = "https://script.google.com/macros/s/AKfycbz5zkASUR1Ye1ZzYvPDvq4VhZegvZHzG5vdczLEaahcw_NDO2D9vb_4sGVYFrjrHzc/exec";
-    let clientState = { id: null, name: null, avatar: null, orders: [], addresses: new Set(), currentHistoryFilter: 'all' };
+    let clientState = { id: null, name: null, avatar: null, orders: [], materialOrder: { items: [], deliveryDetails: {} } };
     let currentPageId = 'page-home';
-    let mapInstances = {};
     const dom = {};
 
     function initApp() {
@@ -44,54 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- UPDATED FUNCTION TO SAVE CLIENT'S TOKEN WITH BETTER ERROR HANDLING ---
-    async function saveTokenToFirestore(token, clientId) {
-        if (!token || !clientId) {
-            console.log("Token or Client ID is missing, cannot save.");
-            return;
-        }
-        try {
-            const clientRef = doc(db, 'clients', clientId);
-            await setDoc(clientRef, { fcmToken: token, lastSeen: serverTimestamp() }, { merge: true });
-            console.log('SUCCESS: FCM Token was saved to Firestore for client:', clientId);
-        } catch (error) {
-            console.error('!!! FIRESTORE ERROR while saving FCM token:', error);
-            // Show a non-blocking toast to the user so they are aware of the issue.
-            showToast("שגיאה ברישום להתראות. ייתכן שלא תקבל עדכונים.", '⚠️');
-        }
-    }
-
-    // --- UPDATED FUNCTION TO REQUEST PERMISSION AND SAVE TOKEN ---
-    async function requestNotificationPermission() {
-        try {
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                console.log('Notifications permission not granted by client.');
-                showToast("לא אישרת קבלת התראות.", 'ℹ️');
-                return null;
-            }
-
-            const VAPID_KEY = "BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50";
-            const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
-
-            if (currentToken && clientState.id) {
-                console.log('Got Client FCM token, attempting to save to Firestore:', currentToken);
-                await saveTokenToFirestore(currentToken, clientState.id);
-            } else if (!clientState.id) {
-                 console.log('Client not logged in, cannot save token yet.');
-            } else {
-                console.log('No registration token available for client.');
-            }
-            return currentToken;
-        } catch (err) {
-            console.error('An error occurred while retrieving client token. ', err);
-            showToast("שגיאה בקבלת מזהה התראות.", '❌');
-            return null;
-        }
-    }
-
-    // --- UPDATED LOGIN PROCESS TO TRIGGER NOTIFICATION SETUP ---
-    async function loadClientData(clientId, isRefresh = false) {
+    async function loadClientData(clientId) {
         try {
             const data = await apiPost({ action: 'getClientData', identifier: clientId });
             if (data.status === 'error' || !data.clientName) throw new Error(data.message || "Client not found");
@@ -99,49 +51,314 @@ document.addEventListener('DOMContentLoaded', () => {
             clientState = { ...clientState, id: data.clientId, name: data.clientName, avatar: data.avatarUrl, orders: data.orders || [] };
             localStorage.setItem('saban_client_id', data.clientId);
             
-            // AFTER client data is loaded and we have an ID, we ask for permission and save the token
             await requestNotificationPermission();
 
-            if (!isRefresh) {
-                await playSplashScreenAnimation();
-                dom.appShell.style.display = 'flex';
-                setupEventListeners();
-                navigateTo('page-home', true);
-                renderAllPages();
-                dom.helpFab.style.display = 'block';
-            } else {
-                renderAllPages();
-            }
+            await playSplashScreenAnimation();
+            dom.appShell.style.display = 'flex';
+            setupEventListeners();
+            navigateTo('page-home', true);
+            renderAllPages();
 
         } catch (error) {
             console.error("Failed to load client data:", error);
             localStorage.removeItem('saban_client_id');
-            dom.splashScreen.classList.remove('loading');
-            dom.splashScreen.style.display = 'none';
             promptForClientId();
-            showToast("שגיאה בטעינת נתונים. אנא נסה שוב.", '❌');
+            showToast("שגיאה בטעינת נתונים.", '❌');
         }
     }
 
-    // All other functions from your original file remain here...
-    function cacheDomElements(){Object.assign(dom,{body:document.body,appShell:document.querySelector(".app-shell"),splashScreen:document.getElementById("splash-screen"),pages:document.querySelectorAll(".page"),navButtons:document.querySelectorAll(".nav-btn"),modalContainer:document.getElementById("modal-container"),toastContainer:document.getElementById("toast-container"),activeOrdersContainer:document.getElementById("active-orders-container"),containersList:document.getElementById("containers-list"),etaCardContainer:document.getElementById("eta-card-container"),greeting:document.getElementById("greeting"),clientNameHeader:document.getElementById("client-name-header"),profileContainer:document.getElementById("profile-container"),profileAvatar:document.getElementById("profile-avatar"),clock:document.getElementById("clock"),date:document.getElementById("date"),helpFab:document.querySelector(".help-fab"),helpModal:document.getElementById("help-modal"),historyContent:document.getElementById("history-content"),chatContent:document.getElementById("chat-content")})}
-    async function apiPost(body) { const controller = new AbortController(); const timeoutId = setTimeout(() => controller.abort(), 15000); try { const response = await fetch(API_URL, { method: 'POST', mode: 'cors', body: JSON.stringify(body), cache: 'no-cache', headers: { 'Content-Type': 'text/plain' } }); clearTimeout(timeoutId); if (!response.ok) throw new Error(`Network error`); const textResponse = await response.text(); if (textResponse.startsWith('<')) { throw new Error("Received HTML response instead of JSON. Check script URL or permissions."); } return JSON.parse(textResponse); } catch(error) { clearTimeout(timeoutId); console.error("API Post Error:", error); throw error; } }
-    function promptForClientId() { dom.splashScreen.style.display = 'none'; dom.modalContainer.innerHTML = `<div class="modal-content"><h3>ברוכים הבאים</h3><p style="color: var(--text-light); margin: 10px 0 20px 0;">כדי להתחבר, אנא הזן מספר לקוח או טלפון.</p><form id="login-form"><input type="text" id="login-identifier" placeholder="מספר לקוח / טלפון" required style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 16px; margin-bottom: 15px;"><button type="submit" class="btn" style="width: 100%;">התחבר</button></form></div>`; dom.modalContainer.classList.add('show'); document.getElementById('login-form').addEventListener('submit', (e) => { e.preventDefault(); const identifier = document.getElementById('login-identifier').value.trim(); if (identifier) { dom.modalContainer.classList.remove('show'); dom.splashScreen.style.display = 'flex'; dom.splashScreen.classList.add('loading'); loadClientData(identifier); } }); }
-    onMessage(messaging,(payload)=>{console.log("Message received while app is in foreground. ",payload);showToast(`${payload.notification?.title||""}: ${payload.notification?.body||""}`,"🔔")});function updateClock(){if(dom.clock&&dom.date){const e=new Date;dom.clock.textContent=e.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});dom.date.textContent=e.toLocaleDateString("he-IL",{weekday:"long",day:"2-digit",month:"2-digit"})}}async function playSplashScreenAnimation(){return new Promise(e=>{setTimeout(()=>{dom.splashScreen.style.opacity="0";dom.splashScreen.addEventListener("transitionend",()=>{dom.splashScreen.style.display="none";e()},{once:!0})},500)})}
-    function navigateTo(e,t=!1){if(!t&&currentPageId===e)return;const o=document.getElementById(currentPageId),n=document.getElementById(e);if(!n)return;if(t)n.classList.add("active");else{const t=Array.from(dom.pages).findIndex(t=>t.id===currentPageId),s=Array.from(dom.pages).findIndex(t=>t.id===e),i=s>t;o.classList.add(i?"exit-to-left":"exit-to-right");n.classList.add(i?"enter-from-right":"enter-from-left");void n.offsetWidth;n.classList.add("active");o.addEventListener("transitionend",()=>{o.classList.remove("active","exit-to-left","exit-to-right");n.classList.remove("enter-from-left","enter-from-right")},{once:!0})}currentPageId=e;dom.navButtons.forEach(t=>t.classList.toggle("active",t.dataset.page===e))}
-    function renderAllPages(){renderHeaderAndGreeting();renderHomePage();renderContainersPage();renderHistoryPage();renderChatPage()}
-    function renderHeaderAndGreeting(){const e="https://img.icons8.com/?size=100&id=Ry7mumEprV9w&format=png&color=000000";dom.clientNameHeader.textContent=clientState.name;dom.profileAvatar.src=clientState.avatar||e;const t=(new Date).getHours();let o=t<12?"בוקר טוב":t<18?"צהריים טובים":"ערב טוב";dom.greeting.textContent=`${o}, ${clientState.name.split(" ")[0]}`}
-    function renderHomePage(){const e=clientState.orders.filter(e=>"סגור"!==e["סטטוס"]&&e["מכולה ירדה"]),t=clientState.orders.filter(e=>"סגור"!==e["סטטוס"]&&!e["מכולה ירדה"]);if(t.length>0)dom.etaCardContainer.innerHTML=createEtaCardHTML(t[0]);else dom.etaCardContainer.innerHTML="";const o=dom.activeOrdersContainer;if(o.innerHTML="",e.length>0){const t=createContainerCardElement(e[0]);o.appendChild(t);renderLeafletMap(t.querySelector(".mini-map-container"),e[0]["כתובת"])}else 0===t.length&&(o.innerHTML='<div class="card" style="text-align:center;"><p>אין לך כרגע הזמנות פעילות.</p></div>')}
-    function createEtaCardHTML(e){const t=e["זמן הגעה משוער"],o=e["שם נהג"];let n="static-truck",s="width: 0%;",i="right: 0%;";let d=`${o?`הנהג ${o} בדרך`:"הזמנה בדרך"}`,a=`צפי הגעה: ${t||"טרם עודכן"}`;if(t){n="";const[e,o]=t.split(":").map(Number),i=new Date;i.setHours(e,o,0,0);const d=new Date;d.setHours(8,0,0,0);const a=Math.min(100,Math.max(0,(Date.now()-d)/(i-d)*100));s=`width: ${a}%;`;truckStyle=`right: ${a}%;`}return`<div class="card eta-card ${t?"active":""}"><div style="color: var(--brand); font-weight: 700;">${d}</div><div>${a}</div><div class="eta-road"><div class="eta-progress" style="${s}"></div><div class="eta-truck ${n}" style="${truckStyle}">${t?'<div class="siren"></div>':""}🚛</div></div></div>`}
-    function renderContainersPage(){const e=clientState.orders.filter(e=>"סגור"!==e["סטטוס"]&&e["מכולה ירדה"]),t=dom.containersList;t.innerHTML="";if(0===e.length){t.innerHTML='<div class="card" style="text-align:center;"><p>אין לך מכולות פעילות כרגע.</p></div>';return}e.forEach(e=>{const o=createContainerCardElement(e);t.appendChild(o);setTimeout(()=>renderLeafletMap(o.querySelector(".mini-map-container"),e["כתובת"]),100)})}
-    function renderHistoryPage(e=clientState.currentHistoryFilter){clientState.currentHistoryFilter=e;const t=["all",...new Set(clientState.orders.map(e=>e["פרוייקט"]).filter(Boolean))],o=t.map(t=>`<button class="filter-btn ${e===t?"active":""}" data-action="filter-history" data-project="${t}">`+("all"===t?"הכל":t)+"</button>").join(""),n="all"===e?clientState.orders:clientState.orders.filter(t=>t["פרוייקט"]===e),s=`<div id="history-filters">${o}</div><div style="overflow-x: auto;"><table class="history-table"><thead><tr><th>פרויקט</th><th>תעודה</th><th>תאריך</th><th>פעולה</th></tr></thead><tbody>`+n.map(e=>`<tr class="history-row" data-action="show-history-details" data-order-id="${e["תעודה"]}" data-action-type="${e["סוג פעולה"]}"><td>${e["פרוייקט"]||"-"}</td><td>${e["תעודה"]||""}</td><td>`+(new Date(e["תאריך הזמנה"])?.toLocaleDateString("he-IL")||"")+`</td><td>${e["סוג פעולה"]||""}</td></tr>`).join("")+"</tbody></table></div>";dom.historyContent.innerHTML=s}
-    function renderChatPage(){const e={"שאלות נפוצות":["מה צפי ההגעה?","האם ניתן להאריך שהייה?"],בקשות:["המכולה מלאה, לתאם פינוי.","פינוי דחוף, צרו קשר."]},t=Object.keys(e).map(t=>`<p style="font-weight: 600; margin-top: 15px; margin-bottom: 5px;">${t}</p>`+e[t].map(e=>`<button class="btn secondary" data-action="chat-template" style="width: 100%; justify-content: flex-start; text-align: right; margin-bottom: 5px;">${e}</button>`).join("")).join("");dom.chatContent.innerHTML=`<div id="chat-templates">${t}</div><form id="chat-form" style="margin-top: 20px;"><label for="chat-message">או כתוב הודעה חופשית: 👋</label><textarea id="chat-message" required placeholder="כתוב כאן..." style="width:100%; height:80px; padding:10px; border-radius:8px; border:1px solid var(--border); margin-top:5px;"></textarea><button type="submit" class="btn" style="width:100%; margin-top: 10px;">שלח הודעה</button></form>`}
-    function createContainerCardElement(e){const t=document.createElement("div");t.className="card container-card";const o=new Date(e["תאריך הזמנה"]),n=new Date(e["תאריך סיום צפוי"]),s=Math.min(100,(Date.now()-o)/(n-o)*100),i=Math.ceil(Math.max(0,n-Date.now())/864e5),d=Date.now()>n;d&&t.classList.add("overdue");const a=(e.requests||[]).map(e=>`<div class="request-history-item"><span>בקשת ${e.type}</span><span style="color: var(--text-muted);">${e.date}</span></div>`).join("");return t.innerHTML=`${d?'<div class="overdue-badge">בחריגה</div>':""}<div style="display:flex; justify-content: space-between; align-items: flex-start;"><div><h3 style="font-size: 1.1rem; margin-bottom: 4px;">${e["שם פרויקט"]||`מכולה ${e["מכולה ירדה"]}`}</h3><p style="color: var(--text-light); font-size: 0.9rem;">${e["כתובת"]}</p></div><div style="text-align: center; flex-shrink: 0; margin-right: 15px;"><div style="font-weight: bold; font-size: 1.2rem;">${d?"!":i}</div><div style="font-size: 0.7rem; color: var(--text-muted);">${d?"בחריגה":"ימים נותרו"}</div></div></div><div class="progress-bar"><div class="progress-bar-inner" style="width: ${s}%;"></div></div><div class="mini-map-container" id="map-card-${e["תעודה"]}"></div><div class="request-history"><h4 style="font-size: 1rem; margin-bottom: 5px;">היסטוריית בקשות</h4>${a||'<p style="font-size: 14px; color: var(--text-muted);">אין בקשות קודמות.</p>'}</div><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;"><button class="btn secondary" data-action="request-swap" data-order-id="${e["תעודה"]}">החלפה</button><button class="btn" data-action="request-pickup" data-order-id="${e["תעודה"]}">פינוי</button></div>`,t}
-    async function sendClientRequest(e,t){try{showToast("שולח בקשה...","💬");await apiPost({action:"clientRequest",timestamp:(new Date).toISOString(),clientId:clientState.id,clientName:clientState.name,requestType:e,details:t});await addDoc(collection(db,"clientRequests"),{clientId:clientState.id,clientName:clientState.name,requestType:e,details:t,timestamp:serverTimestamp(),status:"new"});showToast("בקשתך נשלחה בהצלחה!","✅")}catch(e){showToast("שגיאה בשליחת הבקשה","❌")}}
-    function openOrderModal(e,t){const o=!t;let n=o?"הזמנת מכולה חדשה":`בקשת ${e}`;let s=o?`<div class="form-group"><label>בחר כתובת או הקלד חדשה</label><select id="address-select" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); margin-top:5px;"><option value="">-- בחר כתובת --</option>${Array.from(clientState.addresses).map(e=>`<option value="${e}">${e}</option>`).join("")}<option value="new">כתובת חדשה...</option></select></div><div id="new-address-group" style="display:none; margin-top:10px;"><input type="text" id="new-address" placeholder="עיר, רחוב, מספר בית" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border);"></div><div style="margin-top:10px;"><input type="text" id="placement-location" placeholder="מיקום מדויק להצבה (ליד השער וכו')" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border);"></div>`:`<p style="margin-bottom: 20px;">עבור מכולה בכתובת: <strong>${t["כתובת"]}</strong></p>`;dom.modalContainer.innerHTML=`<div class="modal-content"><h3 style="margin-bottom: 20px;">${n}</h3>${s}<form id="order-request-form"><div style="margin-top:15px;"><label>הערות</label><textarea id="order-notes" placeholder="לדוגמה: נא לתאם הגעה טלפונית..." style="width:100%; height:80px; padding:10px; border-radius:8px; border:1px solid var(--border); margin-top:5px;"></textarea></div><div style="display: flex; gap: 10px; margin-top:20px;"><button type="button" class="btn secondary" data-action="close-modal" style="flex:1;">ביטול</button><button type="submit" class="btn" style="flex:2;">שלח בקשה</button></div></form></div>`;dom.modalContainer.classList.add("show");o&&(document.getElementById("address-select").onchange=e=>{document.getElementById("new-address-group").style.display="new"===e.target.value?"block":"none"});dom.modalContainer.querySelector('[data-action="close-modal"]').onclick=()=>dom.modalContainer.classList.remove("show");document.getElementById("order-request-form").onsubmit=o=>{o.preventDefault();let n,s;const i=document.getElementById("order-notes").value;if(t){details=`מכולה קיימת: ${t["תעודה"]}. כתובת: ${t["כתובת"]}. הערות: ${i||"אין"}`}else{const e=document.getElementById("new-address").value.trim(),t=document.getElementById("placement-location").value.trim();if(s=e||document.getElementById("address-select").value,!s||"new"===s||""===s)return void showToast("אנא בחר או הקלד כתובת.","error");details=`כתובת: ${s}. מיקום להצבה: ${t||"לא צוין"}. הערות: ${i||"אין"}`}sendClientRequest(e,details);dom.modalContainer.classList.remove("show")}}
-    function openHistoryDetailModal(e){if(!e)return;dom.modalContainer.innerHTML=`<div class="modal-content" style="padding:0;"><div style="padding: 20px 20px 0 20px;"><h3 style="margin-bottom: 10px;">פרטי הזמנה ${e["תעודה"]}</h3><p><strong>פרויקט:</strong> ${e["פרוייקט"]||"-"}</p><p><strong>כתובת:</strong> ${e["כתובת"]}</p><p><strong>תאריך:</strong> `+(new Date(e["תאריך הזמנה"])?.toLocaleDateString("he-IL"))+`</p><p><strong>פעולה:</strong> ${e["סוג פעולה"]}</p></div><div id="history-map" style="height: 200px; width: 100%; margin-top: 15px; border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius);"></div></div>`;dom.modalContainer.classList.add("show");renderLeafletMap(document.getElementById("history-map"),e["כתובת"]);dom.modalContainer.onclick=e=>{e.target===dom.modalContainer&&dom.modalContainer.classList.remove("show")}}
-    function renderLeafletMap(e,t){if(!e||!t)return;const o=e.id;mapInstances[o]&&mapInstances[o].remove();e.innerHTML='<div style="text-align:center; padding-top: 50px; color: var(--text-muted);">טוען מפה...</div>';fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(t)}`).then(e=>e.json()).then(t=>{if(t&&t.length>0){e.innerHTML="";const{lat:n,lon:s}=t[0],i=L.map(e,{zoomControl:!1,scrollWheelZoom:!1,dragging:!0,doubleClickZoom:!1}).setView([n,s],15);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(i);L.marker([n,s]).addTo(i);mapInstances[o]=i}else e.innerHTML='<div style="text-align:center; padding-top: 50px; color: var(--text-muted);">כתובת לא נמצאה.</div>'}).catch(t=>{e.innerHTML='<div style="text-align:center; padding-top: 50px; color: var(--text-muted);">שגיאה בטעינת מפה.</div>'})}
-    function showToast(e,t="ℹ️"){const o=document.createElement("div");o.className="toast";o.innerHTML=`<span class="toast-icon">${t}</span> <span>${e}</span>`;dom.toastContainer.appendChild(o);setTimeout(()=>o.classList.add("show"),100);setTimeout(()=>{o.classList.remove("show");o.addEventListener("transitionend",()=>o.remove())},3e3)}
-    function setupEventListeners(){dom.body.addEventListener("click",e=>{const t=e.target.closest("[data-action]");if(!t){e.target.closest("#profile-container")||dom.profileContainer.classList.remove("active");e.target.classList.contains("modal-overlay")&&e.target.classList.remove("show");return}const o=t.dataset.action;switch(o){case"navigate":navigateTo(t.dataset.page);break;case"help-fab":dom.helpModal.classList.add("show");break;case"help-close":dom.helpModal.classList.remove("show");break;case"toggle-profile":dom.profileContainer.classList.toggle("active");break;case"logout":localStorage.clear();window.location.reload();break;case"new-order":openOrderModal("הזמנה חדשה");break;case"chat-template":document.getElementById("chat-message").value=t.textContent;break;case"refresh-data":if(clientState.id){const e=t;e.style.transition="transform 0.5s ease";e.style.transform="rotate(360deg)";e.disabled=!0;showToast("מרענן נתונים...","🔄");loadClientData(clientState.id,!0).then(()=>{showToast("הנתונים עודכנו!","✅")}).catch(e=>{console.error("Refresh failed:",e);showToast("שגיאה ברענון הנתונים","❌")}).finally(()=>{setTimeout(()=>{e.style.transition="";e.style.transform="";e.disabled=!1},500)})}break;case"filter-history":renderHistoryPage(t.dataset.project);break;case"show-history-details":const e=clientState.orders.find(e=>e["תעודה"]==t.dataset.orderId);openHistoryDetailModal(e);break;case"request-swap":case"request-pickup":{const e=t.dataset.orderId,n=clientState.orders.find(t=>t["תעודה"]==e);n&&openOrderModal("request-swap"===o?"החלפה":"פינוי",n);break}}});dom.body.addEventListener("submit",e=>{if("chat-form"===e.target.id){e.preventDefault();const t=document.getElementById("chat-message");t.value.trim()&&(sendClientRequest("הודעת צאט",t.value.trim()),t.value="")}})}
+    // --- RENDER FUNCTIONS ---
+    function renderAllPages() {
+        renderHeaderAndGreeting();
+        renderHomePage();
+        renderHistoryPage();
+    }
+
+    function renderHeaderAndGreeting() {
+        const defaultAvatar = "https://img.icons8.com/?size=100&id=Ry7mumEprV9w&format=png&color=000000";
+        dom.clientNameHeader.textContent = clientState.name;
+        dom.profileAvatar.src = clientState.avatar || defaultAvatar;
+        const hour = new Date().getHours();
+        let greetingText = (hour < 12) ? "בוקר טוב" : (hour < 18) ? "צהריים טובים" : "ערב טוב";
+        dom.greeting.textContent = `${greetingText}, ${clientState.name.split(' ')[0]}`;
+    }
+
+    function renderHomePage() {
+        const activeOrders = clientState.orders.filter(o => o['סטטוס'] !== 'סגור');
+        const container = dom.activeOrdersContainer;
+        container.innerHTML = '';
+        if (activeOrders.length > 0) {
+            activeOrders.forEach(order => {
+                const cardElement = createContainerCardElement(order);
+                container.appendChild(cardElement);
+                renderLeafletMap(cardElement.querySelector('.mini-map-container'), order['כתובת']);
+            });
+        } else {
+            container.innerHTML = '<div class="card"><p>אין לך כרגע הזמנות פעילות.</p></div>';
+        }
+    }
+
+    function renderHistoryPage() {
+         const closedOrders = clientState.orders.filter(o => o['סטטוס'] === 'סגור');
+         dom.historyContent.innerHTML = closedOrders.map(order => `<div class="card">${order['תאריך הזמנה']} - ${order['כתובת']}</div>`).join('');
+    }
+
+    function createContainerCardElement(order) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <h3>${order['שם פרויקט'] || `הזמנה`}</h3>
+            <p>${order['כתובת']}</p>
+            <div class="mini-map-container" id="map-${order['תעודה']}"></div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button class="btn secondary" data-action="request-swap" data-id="${order['תעודה']}">החלפה</button>
+                <button class="btn" data-action="request-pickup" data-id="${order['תעודה']}">פינוי</button>
+            </div>`;
+        return card;
+    }
+
+    // --- BUILDING MATERIALS LOGIC ---
+    function renderMaterialsList() {
+        dom.materialsListContainer.innerHTML = clientState.materialOrder.items.map((item, index) => `
+            <div class="material-item">
+                <span class="material-name">${index + 1}. ${item.product}</span>
+                <input type="number" class="material-quantity" value="${item.quantity}" min="1" data-index="${index}" placeholder="כמות">
+                <button class="material-delete-btn" data-index="${index}">✖</button>
+            </div>
+        `).join('');
+        updateMaterialsSummary();
+    }
+
+    function updateMaterialsSummary() {
+        const totalItems = clientState.materialOrder.items.length;
+        dom.materialsSummary.textContent = `סה"כ פריטים: ${totalItems}`;
+    }
+    
+    function handleMaterialAdd() {
+        const productName = dom.materialInput.value.trim();
+        if (productName) {
+            clientState.materialOrder.items.push({ product: productName, quantity: 1 });
+            renderMaterialsList();
+            dom.materialInput.value = '';
+            dom.materialInput.focus();
+        }
+    }
+    
+    async function handleMaterialOrderSubmit() {
+        const { items } = clientState.materialOrder;
+        const contactPerson = dom.contactPerson.value.trim();
+        const contactPhone = dom.contactPhone.value.trim();
+        const deliveryAddress = dom.deliveryAddress.value.trim();
+
+        if (items.length === 0) return showToast("יש להוסיף לפחות מוצר אחד.", '⚠️');
+        if (!contactPerson || !contactPhone || !deliveryAddress) return showToast("יש למלא את כל פרטי האספקה.", '⚠️');
+
+        const orderDetails = { clientName: clientState.name, clientId: clientState.id, contactPerson, contactPhone, deliveryAddress, items };
+        showMaterialOrderConfirmation(orderDetails);
+    }
+    
+    function showMaterialOrderConfirmation(order) {
+        const itemsList = order.items.map((item, i) => `${i + 1}. ${item.product} (כמות: ${item.quantity})`).join('\n');
+        dom.modalContainer.innerHTML = `
+            <div class="modal-content">
+                <h3>סיכום הזמנה</h3>
+                <p><strong>מזמין:</strong> ${order.clientName}</p>
+                <p><strong>איש קשר:</strong> ${order.contactPerson} (${order.contactPhone})</p>
+                <p><strong>כתובת:</strong> ${order.deliveryAddress}</p>
+                <h4 style="margin-top: 15px;">פריטים:</h4>
+                <pre style="white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 8px;">${itemsList}</pre>
+                <div style="display: flex; gap: 10px; margin-top:20px;">
+                    <button type="button" class="btn secondary" data-action="close-modal" style="flex:1;">ביטול</button>
+                    <button type="button" id="confirm-and-send-order" class="btn" style="flex:2;">אשר ושלח</button>
+                </div>
+            </div>`;
+        dom.modalContainer.classList.add('show');
+        
+        dom.modalContainer.querySelector('#confirm-and-send-order').onclick = async () => {
+            await saveMaterialOrderToFirestore(order);
+            sendMaterialOrderToWhatsapp(order);
+            clientState.materialOrder.items = [];
+            renderMaterialsList();
+            dom.deliveryDetailsForm.reset();
+            dom.modalContainer.classList.remove('show');
+            showToast("ההזמנה נשלחה בהצלחה!", '✅');
+            navigateTo('page-home');
+        };
+    }
+
+    async function saveMaterialOrderToFirestore(order) {
+        const itemsString = order.items.map(item => `${item.product} (x${item.quantity})`).join(', ');
+        const details = `איש קשר: ${order.contactPerson} (${order.contactPhone}). כתובת: ${order.deliveryAddress}. פריטים: ${itemsString}`;
+        try {
+            await addDoc(collection(db, "clientRequests"), {
+                clientId: order.clientId,
+                clientName: order.clientName,
+                requestType: "הזמנת חומרי בנין",
+                details: details,
+                timestamp: serverTimestamp(),
+                status: "new"
+            });
+        } catch (error) {
+            console.error("Error saving material order:", error);
+            showToast("שגיאה בשמירת ההזמנה במערכת", '❌');
+        }
+    }
+    
+    function sendMaterialOrderToWhatsapp(order) {
+        const WA_NUMBER = "972508860896";
+        let message = `*הזמנה חדשה לחומרי בנין* 🔥\n\n*לקוח:* ${order.clientName}\n*איש קשר:* ${order.contactPerson} (${order.contactPhone})\n*כתובת:* ${order.deliveryAddress}\n\n*פירוט:*\n`;
+        order.items.forEach((item, i) => { message += `${i + 1}. ${item.product} (כמות: *${item.quantity}*)\n`; });
+        const whatsappUrl = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
+    }
+
+    function addLocationToOrder() {
+        if (!navigator.geolocation) return showToast("שירותי מיקום לא נתמכים.", '⚠️');
+        showToast("מאחזר מיקום...", '📍');
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                const data = await response.json();
+                dom.deliveryAddress.value = data.display_name || `קואורדינטות: ${latitude}, ${longitude}`;
+                showToast(data.display_name ? "המיקום עודכן!" : "צורפו קואורדינטות.", '✅');
+            } catch (error) {
+                dom.deliveryAddress.value = `Lat: ${latitude}, Lon: ${longitude}`;
+                showToast("לא נמצאה כתובת, צורפו קואורדינטות.", 'ℹ️');
+            }
+        }, () => showToast("לא ניתן היה לקבל את מיקומך.", '❌'));
+    }
+
+    // --- UTILITY & HELPER FUNCTIONS ---
+    function cacheDomElements(){
+        Object.assign(dom, {
+            appShell: document.querySelector('.app-shell'),
+            splashScreen: document.getElementById('splash-screen'),
+            pages: document.querySelectorAll('.page'),
+            navButtons: document.querySelectorAll('.nav-btn'),
+            modalContainer: document.getElementById('modal-container'),
+            toastContainer: document.getElementById('toast-container'),
+            activeOrdersContainer: document.getElementById('active-orders-container'),
+            greeting: document.getElementById('greeting'),
+            clientNameHeader: document.getElementById('client-name-header'),
+            profileAvatar: document.getElementById('profile-avatar'),
+            clock: document.getElementById('clock'),
+            date: document.getElementById('date'),
+            historyContent: document.getElementById('history-content'),
+            // Material page elements
+            materialInput: document.getElementById('material-input'),
+            addMaterialBtn: document.getElementById('add-material-btn'),
+            materialsListContainer: document.getElementById('materials-list-container'),
+            deliveryDetailsForm: document.getElementById('delivery-details-form'),
+            contactPerson: document.getElementById('contact-person'),
+            contactPhone: document.getElementById('contact-phone'),
+            deliveryAddress: document.getElementById('delivery-address'),
+            addLocationBtn: document.getElementById('add-location-btn'),
+            materialsSummary: document.getElementById('materials-summary'),
+            submitMaterialOrderBtn: document.getElementById('submit-material-order-btn')
+        });
+    }
+    
+    function setupEventListeners() {
+        // Main click handler for data-actions
+        document.body.addEventListener('click', (e) => {
+            const actionTarget = e.target.closest('[data-action]');
+            if (actionTarget) {
+                const action = actionTarget.dataset.action;
+                if (action === 'navigate') navigateTo(actionTarget.dataset.page);
+                else if (action === 'request-swap' || action === 'request-pickup') {
+                    const orderId = actionTarget.dataset.id;
+                    const type = action === 'request-swap' ? 'החלפה' : 'פינוי';
+                    sendContainerRequest(type, orderId);
+                }
+            }
+             // Modal closing
+            if (e.target.classList.contains("modal-overlay") || e.target.dataset.action === 'close-modal') {
+                dom.modalContainer.classList.remove("show");
+            }
+        });
+    
+        // Materials page specific listeners
+        dom.materialInput.addEventListener('keyup', (e) => e.key === 'Enter' && handleMaterialAdd());
+        dom.addMaterialBtn.addEventListener('click', handleMaterialAdd);
+        dom.submitMaterialOrderBtn.addEventListener('click', handleMaterialOrderSubmit);
+        dom.addLocationBtn.addEventListener('click', addLocationToOrder);
+    
+        dom.materialsListContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('material-delete-btn')) {
+                clientState.materialOrder.items.splice(parseInt(e.target.dataset.index), 1);
+                renderMaterialsList();
+            }
+        });
+        dom.materialsListContainer.addEventListener('input', (e) => {
+             if (e.target.classList.contains('material-quantity')) {
+                clientState.materialOrder.items[parseInt(e.target.dataset.index)].quantity = parseInt(e.target.value) || 1;
+            }
+        });
+    }
+
+    async function sendContainerRequest(requestType, orderId) {
+         try {
+            showToast("שולח בקשה...", '💬');
+            await addDoc(collection(db, "clientRequests"), {
+                clientId: clientState.id,
+                clientName: clientState.name,
+                requestType: requestType,
+                orderId: orderId,
+                timestamp: serverTimestamp(),
+                status: 'new'
+            });
+            showToast("בקשתך נשלחה בהצלחה!", '✅');
+        } catch (error) { 
+            showToast(`שגיאה בשליחת הבקשה`, '❌'); 
+        }
+    }
+
+    function navigateTo(pageId, isInitial = false) {
+        if (!isInitial && currentPageId === pageId) return;
+        const oldPage = document.getElementById(currentPageId);
+        const newPage = document.getElementById(pageId);
+        if (isInitial) {
+            newPage.classList.add('active');
+        } else {
+            const oldIndex = Array.from(dom.pages).findIndex(p => p.id === currentPageId);
+            const newIndex = Array.from(dom.pages).findIndex(p => p.id === pageId);
+            const isRight = newIndex > oldIndex;
+            oldPage.classList.add(isRight ? 'exit-to-left' : 'exit-to-right');
+            newPage.classList.add('active', isRight ? 'enter-from-right' : 'enter-from-left');
+            
+            oldPage.addEventListener('transitionend', () => {
+                oldPage.className = 'page';
+                newPage.className = 'page active';
+            }, { once: true });
+        }
+        currentPageId = pageId;
+        dom.navButtons.forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
+    }
+
+    function renderLeafletMap(container, address) {
+        if (!container || !address) return;
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.length > 0) {
+                    const { lat, lon } = data[0];
+                    const map = L.map(container, { zoomControl: false, scrollWheelZoom: false }).setView([lat, lon], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                    L.marker([lat, lon]).addTo(map);
+                } else { container.innerHTML = 'כתובת לא נמצאה.'; }
+            }).catch(err => { container.innerHTML = 'שגיאה בטעינת מפה.'; });
+    }
+
+    async function apiPost(body) { /* ... implementation ... */ return fetch(API_URL, { method: 'POST', body: JSON.stringify(body) }).then(res => res.json()) }
+    function promptForClientId() { /* ... implementation ... */ dom.modalContainer.innerHTML = `<div class="modal-content"><h3>ברוכים הבאים</h3><p>כדי להתחבר, אנא הזן מספר לקוח או טלפון.</p><form id="login-form"><input type="text" id="login-identifier" placeholder="מספר לקוח / טלפון" required style="width: 100%; padding: 12px; border: 1px solid var(--border); margin-bottom: 15px;"><button type="submit" class="btn" style="width: 100%;">התחבר</button></form></div>`; dom.modalContainer.classList.add('show'); document.getElementById('login-form').addEventListener('submit', (e) => { e.preventDefault(); const id = document.getElementById('login-identifier').value.trim(); if(id){ dom.modalContainer.classList.remove('show'); dom.splashScreen.style.display = 'flex'; loadClientData(id); } }); }
+    async function playSplashScreenAnimation() { return new Promise(r => { setTimeout(() => { dom.splashScreen.style.opacity = '0'; dom.splashScreen.addEventListener('transitionend', () => { dom.splashScreen.style.display = 'none'; r(); }, { once: true }); }, 500); }); }
+    function updateClock() { const n = new Date(); dom.clock.textContent = n.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }); dom.date.textContent = n.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }); }
+    function showToast(message, icon = 'ℹ️') { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<span>${icon}</span> <span>${message}</span>`; dom.toastContainer.appendChild(t); setTimeout(() => t.classList.add('show'), 10); setTimeout(() => { t.classList.remove('show'); t.addEventListener('transitionend', () => t.remove()); }, 3000); }
+    async function requestNotificationPermission() { /* ... implementation ... */ try { const p = await Notification.requestPermission(); if (p !== 'granted') return; const t = await getToken(messaging, { vapidKey: "BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50" }); if (t && clientState.id) saveTokenToFirestore(t, clientState.id); } catch (e) { console.error('Error getting token', e); } }
+    async function saveTokenToFirestore(token, clientId) { /* ... implementation ... */ try { await setDoc(doc(db, 'clients', clientId), { fcmToken: token }, { merge: true }); } catch (e) { console.error('Error saving token', e); } }
+    onMessage(messaging, (payload) => { showToast(payload.notification.body, '🔔'); });
+
     initApp();
 });
+
