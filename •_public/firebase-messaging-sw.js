@@ -29,3 +29,4 @@ messaging.onBackgroundMessage(function(payload) {
 
     return self.registration.showNotification(notificationTitle, notificationOptions);
 });
+
