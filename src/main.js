@@ -94,13 +94,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderLeafletMap(cardElement.querySelector('.mini-map-container'), order['כתובת']);
             });
         } else {
-            container.innerHTML = '<div class="card"><p>אין לך כרגע הזמנות פעילות.</p></div>';
+            container.innerHTML = '<div class="card" style="text-align:center;"><p>אין לך כרגע הזמנות פעילות.</p></div>';
         }
     }
 
     function renderHistoryPage() {
          const closedOrders = clientState.orders.filter(o => o['סטטוס'] === 'סגור');
-         dom.historyContent.innerHTML = closedOrders.map(order => `<div class="card">${order['תאריך הזמנה']} - ${order['כתובת']}</div>`).join('');
+         dom.historyContent.innerHTML = closedOrders.map(order => `<div class="card"><strong>${new Date(order['תאריך הזמנה']).toLocaleDateString('he-IL')}</strong> - ${order['כתובת']}</div>`).join('');
     }
 
     function createContainerCardElement(order) {
@@ -265,15 +265,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const actionTarget = e.target.closest('[data-action]');
             if (actionTarget) {
                 const action = actionTarget.dataset.action;
-                if (action === 'navigate') navigateTo(actionTarget.dataset.page);
-                else if (action === 'request-swap' || action === 'request-pickup') {
+                if (action === 'navigate') {
+                    navigateTo(actionTarget.dataset.page);
+                } else if (action === 'request-swap' || action === 'request-pickup') {
                     const orderId = actionTarget.dataset.id;
                     const type = action === 'request-swap' ? 'החלפה' : 'פינוי';
                     sendContainerRequest(type, orderId);
                 }
             }
              // Modal closing
-            if (e.target.classList.contains("modal-overlay") || e.target.dataset.action === 'close-modal') {
+            if (e.target.classList.contains("modal-overlay") || e.target.closest('[data-action="close-modal"]')) {
                 dom.modalContainer.classList.remove("show");
             }
         });
@@ -318,6 +319,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isInitial && currentPageId === pageId) return;
         const oldPage = document.getElementById(currentPageId);
         const newPage = document.getElementById(pageId);
+        if (!oldPage || !newPage) return; // Safety check
+
         if (isInitial) {
             newPage.classList.add('active');
         } else {
@@ -350,13 +353,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }).catch(err => { container.innerHTML = 'שגיאה בטעינת מפה.'; });
     }
 
-    async function apiPost(body) { /* ... implementation ... */ return fetch(API_URL, { method: 'POST', body: JSON.stringify(body) }).then(res => res.json()) }
-    function promptForClientId() { /* ... implementation ... */ dom.modalContainer.innerHTML = `<div class="modal-content"><h3>ברוכים הבאים</h3><p>כדי להתחבר, אנא הזן מספר לקוח או טלפון.</p><form id="login-form"><input type="text" id="login-identifier" placeholder="מספר לקוח / טלפון" required style="width: 100%; padding: 12px; border: 1px solid var(--border); margin-bottom: 15px;"><button type="submit" class="btn" style="width: 100%;">התחבר</button></form></div>`; dom.modalContainer.classList.add('show'); document.getElementById('login-form').addEventListener('submit', (e) => { e.preventDefault(); const id = document.getElementById('login-identifier').value.trim(); if(id){ dom.modalContainer.classList.remove('show'); dom.splashScreen.style.display = 'flex'; loadClientData(id); } }); }
+    async function apiPost(body) { return fetch(API_URL, { method: 'POST', body: JSON.stringify(body) }).then(res => res.json()) }
+    function promptForClientId() { dom.modalContainer.innerHTML = `<div class="modal-content"><h3>ברוכים הבאים</h3><p>כדי להתחבר, אנא הזן מספר לקוח או טלפון.</p><form id="login-form"><input type="text" id="login-identifier" placeholder="מספר לקוח / טלפון" required style="width: 100%; padding: 12px; border: 1px solid var(--border); margin-bottom: 15px;"><button type="submit" class="btn" style="width: 100%;">התחבר</button></form></div>`; dom.modalContainer.classList.add('show'); document.getElementById('login-form').addEventListener('submit', (e) => { e.preventDefault(); const id = document.getElementById('login-identifier').value.trim(); if(id){ dom.modalContainer.classList.remove('show'); dom.splashScreen.style.display = 'flex'; loadClientData(id); } }); }
     async function playSplashScreenAnimation() { return new Promise(r => { setTimeout(() => { dom.splashScreen.style.opacity = '0'; dom.splashScreen.addEventListener('transitionend', () => { dom.splashScreen.style.display = 'none'; r(); }, { once: true }); }, 500); }); }
     function updateClock() { const n = new Date(); dom.clock.textContent = n.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }); dom.date.textContent = n.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }); }
     function showToast(message, icon = 'ℹ️') { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<span>${icon}</span> <span>${message}</span>`; dom.toastContainer.appendChild(t); setTimeout(() => t.classList.add('show'), 10); setTimeout(() => { t.classList.remove('show'); t.addEventListener('transitionend', () => t.remove()); }, 3000); }
-    async function requestNotificationPermission() { /* ... implementation ... */ try { const p = await Notification.requestPermission(); if (p !== 'granted') return; const t = await getToken(messaging, { vapidKey: "BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50" }); if (t && clientState.id) saveTokenToFirestore(t, clientState.id); } catch (e) { console.error('Error getting token', e); } }
-    async function saveTokenToFirestore(token, clientId) { /* ... implementation ... */ try { await setDoc(doc(db, 'clients', clientId), { fcmToken: token }, { merge: true }); } catch (e) { console.error('Error saving token', e); } }
+    async function requestNotificationPermission() { try { const p = await Notification.requestPermission(); if (p !== 'granted') return; const t = await getToken(messaging, { vapidKey: "BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50" }); if (t && clientState.id) saveTokenToFirestore(t, clientState.id); } catch (e) { console.error('Error getting token', e); } }
+    async function saveTokenToFirestore(token, clientId) { try { await setDoc(doc(db, 'clients', clientId), { fcmToken: token }, { merge: true }); } catch (e) { console.error('Error saving token', e); } }
     onMessage(messaging, (payload) => { showToast(payload.notification.body, '🔔'); });
 
     initApp();
