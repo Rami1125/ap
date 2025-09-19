@@ -136,9 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ========== 5. MATERIALS WIZARD LOGIC ==========
     function navigateWizard(wizard, step) {
-        document.querySelectorAll(`.wizard-step`).forEach(s => {
-            if(s.id.startsWith(wizard)) s.classList.remove('active');
-        });
+        document.querySelectorAll(`.wizard-step`).forEach(s => s.classList.remove('active'));
         document.getElementById(`${wizard}-step-${step}`).classList.add('active');
         dom[`${wizard}Progress`].style.width = `${step * 33.3}%`;
         
@@ -178,8 +176,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleMaterialsListClick(e) {
         const target = e.target;
         const index = parseInt(target.dataset.index);
-
-        if (isNaN(index)) return;
 
         if (target.classList.contains('material-delete-btn')) {
             materialOrder.items.splice(index, 1);
