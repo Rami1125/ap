@@ -311,6 +311,12 @@
             navigateTo('page-home', true);
         }
 
+        function renderAllPages() {
+            renderHeader();
+            renderHomePage();
+            renderHistoryPage();
+        }
+
         function navigateTo(pageId, isInitial = false) {
              if (!isInitial && pageId === currentPageId) return;
             dom.pages.forEach(p => p.classList.remove('active'));
