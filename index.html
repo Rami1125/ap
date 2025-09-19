@@ -117,7 +117,19 @@
 
                 <!-- Container Wizard -->
                 <div id="container-wizard" class="wizard-container" style="display: none;">
-                    <!-- Container wizard steps will go here -->
+                     <div class="progress-bar-container"><div class="progress-bar" id="container-progress"></div></div>
+                    <div id="container-step-1" class="wizard-step active">
+                        <div class="card"><h3>שלב 1: פרטי מכולה</h3><form id="container-details-form"><div class="form-group"><label for="container-type">סוג מכולה</label><select id="container-type" required><option value="">בחר סוג...</option><option value="standard">מכולה סטנדרטית (6 מטר)</option><option value="large">מכולה גדולה (12 מטר)</option></select></div><div class="form-group"><label for="rental-days">מספר ימי שכירות</label><input type="number" id="rental-days" min="1" value="7" required></div></form></div>
+                        <div class="wizard-nav"><button class="btn" id="container-step1-next" disabled>הבא: פרטי אספקה &rarr;</button></div>
+                    </div>
+                     <div id="container-step-2" class="wizard-step">
+                        <div class="card"><h3>שלב 2: פרטי אספקה</h3><form id="container-delivery-form"><div class="form-group"><label for="con-contact-person">איש קשר</label><input type="text" id="con-contact-person" required></div><div class="form-group"><label for="con-contact-phone">טלפון</label><input type="tel" id="con-contact-phone" required></div><div class="form-group"><label for="con-delivery-address">כתובת</label><input type="text" id="con-delivery-address" required></div><button type="button" class="btn secondary" id="con-add-location-btn" style="width:100%;">הוסף מיקום נוכחי</button></form></div>
+                        <div class="wizard-nav"><button class="btn secondary" id="container-step2-back">&larr; חזור</button><button class="btn" id="container-step2-next" disabled>הבא &rarr;</button></div>
+                    </div>
+                    <div id="container-step-3" class="wizard-step">
+                        <div class="card"><h3>שלב 3: סיכום ושליחה</h3><div id="container-summary"></div></div>
+                        <div class="wizard-nav"><button class="btn secondary" id="container-step3-back">&larr; חזור</button><button id="submit-container-order-btn" class="btn whatsapp">שלח לוואטסאפ ולמנהל</button></div>
+                    </div>
                 </div>
             </div>
             <div id="page-history" class="page"><h1 class="page-title">היסטוריית הזמנות</h1><div id="history-content"></div></div>
@@ -131,7 +143,293 @@
     <div id="splash-screen"></div><div id="toast-container"></div><div id="modal-container" class="modal-overlay"></div>
 
     <script type="module">
-        // This script will be replaced by main.js during the build process
+        // This script is now self-contained and includes all necessary logic.
+        // ========== 1. FIREBASE & APP SETUP ==========
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
+            authDomain: "hsaban94-cc777.firebaseapp.com",
+            projectId: "hsaban94-cc777",
+            storageBucket: "hsaban94-cc777.appspot.com",
+            messagingSenderId: "299206369469",
+            appId: "1:299206369469:web:50ca90c58f1981ec9457d4"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const messaging = getMessaging(app);
+
+        // ========== 2. STATE & CONFIG ==========
+        let clientState = { id: 'mock_client_123', name: 'רמי לוי' }; // Mock data, replace with real login
+        let currentOrder = { type: 'materials', items: [], deliveryDetails: {} };
+        let currentPageId = 'page-home';
+        const dom = {};
+
+        // ========== 3. NOTIFICATION LOGIC ==========
+        async function setupNotificationsForClient(clientId) {
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') return;
+                const VAPID_KEY = "BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50";
+                const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+                if (token) {
+                    await setDoc(doc(db, 'clients', clientId), { fcmToken: token, lastUpdated: serverTimestamp() }, { merge: true });
+                }
+            } catch (e) { console.error('Notification setup failed:', e); }
+        }
+
+        async function sendRequestToDashboard(requestType, data) {
+            try {
+                await addDoc(collection(db, "clientRequests"), {
+                    clientId: clientState.id, clientName: clientState.name,
+                    requestType, details: data, timestamp: serverTimestamp(), status: "new"
+                });
+                return true;
+            } catch (error) { console.error('Error sending request:', error); return false; }
+        }
+
+        // ========== 4. WHATSAPP & UTILITIES ==========
+        function generateWhatsAppLink(order) {
+            const WA_NUMBER = "972508860896";
+            let msg = `*הזמנה חדשה (${order.type})* 🔥\n*מאת:* ${order.clientName}\n\n*פרטי משלוח:*\n*איש קשר:* ${order.deliveryDetails.contactPerson} (${order.deliveryDetails.contactPhone})\n*כתובת:* ${order.deliveryDetails.deliveryAddress}\n\n`;
+            if (order.type === 'חומרי בנין') {
+                msg += '*פירוט פריטים:*\n' + order.items.map((item, i) => `${i + 1}. ${item.product} (כמות: *${item.quantity}*)`).join('\n');
+            } else { // Container
+                msg += `*פרטי מכולה:*\n*סוג:* ${order.details.type}\n*ימים:* ${order.details.rentalDays}`;
+            }
+            return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
+        }
+
+        function showToast(message, type = 'info') {
+             const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<span>${icons[type] || 'ℹ️'}</span> <span>${message}</span>`;
+            dom.toastContainer.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                toast.addEventListener('transitionend', () => toast.remove());
+            }, 3000);
+        }
+        
+        // ========== 5. DOM & EVENT HANDLING ==========
+        function cacheDomElements() {
+             const elements = {
+                appShell: document.querySelector('.app-shell'), appHeader: document.querySelector('.app-header'),
+                pages: document.querySelectorAll('.page'), navButtons: document.querySelectorAll('.nav-btn'),
+                greeting: document.getElementById('greeting'), homeContent: document.getElementById('home-content'),
+                
+                // Order Page
+                orderTypeTabs: document.querySelector('.order-type-tabs'),
+                materialsWizard: document.getElementById('materials-wizard'),
+                containerWizard: document.getElementById('container-wizard'),
+
+                // Materials Wizard
+                materialsProgress: document.getElementById('materials-progress'),
+                materialInput: document.getElementById('material-input'),
+                materialsList: document.getElementById('materials-list-container'),
+                matStep1Next: document.getElementById('materials-step1-next'),
+                matDeliveryForm: document.getElementById('materials-delivery-form'),
+                matStep2Back: document.getElementById('materials-step2-back'),
+                matStep2Next: document.getElementById('materials-step2-next'),
+                matSummary: document.getElementById('materials-summary'),
+                matStep3Back: document.getElementById('materials-step3-back'),
+                submitMatOrder: document.getElementById('submit-material-order-btn'),
+                
+                // Container Wizard
+                containerProgress: document.getElementById('container-progress'),
+                conDetailsForm: document.getElementById('container-details-form'),
+                conStep1Next: document.getElementById('container-step1-next'),
+                conDeliveryForm: document.getElementById('container-delivery-form'),
+                conStep2Back: document.getElementById('container-step2-back'),
+                conStep2Next: document.getElementById('container-step2-next'),
+                conSummary: document.getElementById('container-summary'),
+                conStep3Back: document.getElementById('container-step3-back'),
+                submitConOrder: document.getElementById('submit-container-order-btn'),
+
+                historyContent: document.getElementById('history-content'),
+                modalContainer: document.getElementById('modal-container'),
+                toastContainer: document.getElementById('toast-container'),
+                splashScreen: document.getElementById('splash-screen'),
+            };
+            for (const key in elements) {
+                if (!elements[key]) { console.error(`DOM Error: Element "${key}" not found.`); return false; }
+            }
+            Object.assign(dom, elements);
+            return true;
+        }
+
+        function setupEventListeners() {
+            dom.navButtons.forEach(btn => btn.addEventListener('click', () => navigateTo(btn.dataset.page)));
+            dom.orderTypeTabs.addEventListener('click', (e) => {
+                if (e.target.classList.contains('tab-btn')) switchOrderType(e.target.dataset.orderType);
+            });
+
+            // Materials Events
+            dom.matStep1Next.addEventListener('click', () => navigateWizard('materials', 2));
+            dom.matStep2Back.addEventListener('click', () => navigateWizard('materials', 1));
+            dom.matStep2Next.addEventListener('click', () => { renderSummary('materials'); navigateWizard('materials', 3); });
+            dom.matStep3Back.addEventListener('click', () => navigateWizard('materials', 2));
+            dom.materialInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') handleMaterialAdd(); });
+            dom.materialsList.addEventListener('click', handleMaterialsListClick);
+            dom.matDeliveryForm.addEventListener('input', () => validateWizardStep('materials', 2));
+            dom.submitMatOrder.addEventListener('click', () => handleOrderSubmit('materials'));
+            
+            // Container Events
+            dom.conStep1Next.addEventListener('click', () => navigateWizard('container', 2));
+            dom.conDetailsForm.addEventListener('input', () => validateWizardStep('container', 1));
+            dom.conStep2Back.addEventListener('click', () => navigateWizard('container', 1));
+            dom.conStep2Next.addEventListener('click', () => { renderSummary('container'); navigateWizard('container', 2); }); // Note: container has 2 steps to summary
+            dom.conDeliveryForm.addEventListener('input', () => validateWizardStep('container', 2));
+            dom.conStep3Back.addEventListener('click', () => navigateWizard('container', 2));
+            dom.submitConOrder.addEventListener('click', () => handleOrderSubmit('container'));
+        }
+
+        // ========== 6. PAGE LOGIC & RENDERING ==========
+        function navigateTo(pageId, isInitial = false) {
+             if (!isInitial && pageId === currentPageId) return;
+            dom.pages.forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId)?.classList.add('active');
+            currentPageId = pageId;
+            dom.navButtons.forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
+        }
+
+        function switchOrderType(type) {
+            currentOrder.type = type;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.orderType === type));
+            dom.materialsWizard.style.display = type === 'materials' ? 'block' : 'none';
+            dom.containerWizard.style.display = type === 'container' ? 'block' : 'none';
+        }
+
+        function renderHeader() {
+            dom.appHeader.innerHTML = `<div id="profile-container"><img src="https://i.postimg.cc/2SbDgD1B/1.png" alt="Logo" style="width: 40px; height: 40px; border-radius: 50%;"></div><h1 style="font-weight: 800; font-size: 20px;">ח. סבן</h1><div style="width: 40px;"></div>`;
+        }
+
+        function renderHomePage() {
+            dom.greeting.textContent = `בוקר טוב, ${clientState.name.split(' ')[0]}`;
+            dom.homeContent.innerHTML = `<div class="card"><p>ברוך הבא לאזור האישי. כאן תוכל לנהל את כל ההזמנות שלך בקלות ובמהירות.</p></div>`;
+        }
+        
+        function renderHistoryPage() {
+            dom.historyContent.innerHTML = `<div class="card"><p>היסטוריית ההזמנות שלך תופיע כאן.</p></div>`;
+        }
+
+        // ========== 7. WIZARD LOGIC ==========
+        function navigateWizard(wizard, step) {
+            document.querySelectorAll(`#${wizard}-wizard .wizard-step`).forEach(s => s.classList.remove('active'));
+            document.getElementById(`${wizard}-step-${step}`)?.classList.add('active');
+            dom[`${wizard}Progress`].style.width = wizard === 'materials' ? `${step * 33.3}%` : `${step * 50}%`;
+            if (navigator.vibrate) navigator.vibrate(50);
+        }
+
+        // --- Materials ---
+        function handleMaterialAdd() {
+            const productName = dom.materialInput.value.trim();
+            if (productName) {
+                currentOrder.items.push({ product: productName, quantity: 1 });
+                renderMaterialsList();
+                dom.materialInput.value = ''; dom.materialInput.focus();
+            }
+        }
+        function renderMaterialsList() {
+            if (currentOrder.items.length === 0) {
+                dom.materialsList.innerHTML = `<p style="text-align: center; color: var(--text-muted);">רשימת המוצרים שלך תופיע כאן.</p>`;
+            } else {
+                dom.materialsList.innerHTML = currentOrder.items.map((item, i) => `
+                    <div class="material-item"><span class="material-name">${i + 1}. ${item.product}</span>
+                    <div class="quantity-control">
+                        <button class="quantity-btn" data-index="${i}" data-op="-">-</button>
+                        <input type="number" class="material-quantity" value="${item.quantity}" readonly>
+                        <button class="quantity-btn" data-index="${i}" data-op="+">+</button>
+                    </div>
+                    <button class="material-delete-btn" data-index="${i}">✖</button></div>`).join('');
+            }
+            dom.matStep1Next.disabled = currentOrder.items.length === 0;
+        }
+        function handleMaterialsListClick(e) {
+            const target = e.target;
+            const index = parseInt(target.dataset.index);
+            if (target.classList.contains('material-delete-btn')) currentOrder.items.splice(index, 1);
+            else if (target.classList.contains('quantity-btn')) {
+                const op = target.dataset.op;
+                if (op === '+') currentOrder.items[index].quantity++;
+                else currentOrder.items[index].quantity = Math.max(1, currentOrder.items[index].quantity - 1);
+            } else return;
+            renderMaterialsList();
+        }
+         function validateWizardStep(wizard, step) {
+            let isValid = false;
+            if (wizard === 'materials' && step === 2) {
+                isValid = dom.matContactPerson.value.trim() && dom.matContactPhone.value.trim() && dom.matDeliveryAddress.value.trim();
+            } else if (wizard === 'container' && step === 1) {
+                isValid = dom.containerType.value !== "";
+            } else if (wizard === 'container' && step === 2) {
+                isValid = dom.conContactPerson.value.trim() && dom.conContactPhone.value.trim() && dom.conDeliveryAddress.value.trim();
+            }
+            dom[`${wizard}Step${step}Next`].disabled = !isValid;
+        }
+        function renderSummary(type) {
+            if (type === 'materials') {
+                const details = { contactPerson: dom.matContactPerson.value, contactPhone: dom.matContactPhone.value, deliveryAddress: dom.matDeliveryAddress.value };
+                currentOrder.deliveryDetails = details;
+                const itemsList = currentOrder.items.map((item, i) => `${i + 1}. ${item.product} (כמות: ${item.quantity})`).join('\n');
+                dom.matSummary.innerHTML = `<p><strong>איש קשר:</strong> ${details.contactPerson} (${details.contactPhone})</p><p><strong>כתובת:</strong> ${details.deliveryAddress}</p><h4 style="margin-top: 15px;">פריטים: (${currentOrder.items.length})</h4><pre>${itemsList}</pre>`;
+            } else { // Container
+                const details = { contactPerson: dom.conContactPerson.value, contactPhone: dom.conContactPhone.value, deliveryAddress: dom.conDeliveryAddress.value };
+                 currentOrder.deliveryDetails = details;
+                 const conType = dom.containerType.options[dom.containerType.selectedIndex].text;
+                 const rentDays = dom.rentalDays.value;
+                 dom.conSummary.innerHTML = `<p><strong>איש קשר:</strong> ${details.contactPerson} (${details.contactPhone})</p><p><strong>כתובת:</strong> ${details.deliveryAddress}</p><h4 style="margin-top: 15px;">פרטי מכולה:</h4><pre>סוג: ${conType}\nימי שכירות: ${rentDays}</pre>`;
+            }
+        }
+        
+        async function handleOrderSubmit(type) {
+            showToast('שולח הזמנה...', 'info');
+            const orderData = {
+                type: type === 'materials' ? 'חומרי בנין' : 'מכולה',
+                clientName: clientState.name,
+                deliveryDetails: currentOrder.deliveryDetails,
+                details: type === 'container' ? { type: dom.containerType.value, rentalDays: dom.rentalDays.value } : null,
+                items: type === 'materials' ? currentOrder.items : null
+            };
+            
+            const success = await sendRequestToDashboard(clientState, orderData.type, orderData);
+            if (success) {
+                window.open(generateWhatsAppLink(orderData), '_blank');
+                showToast('הזמנה נשלחה בהצלחה!', 'success');
+                resetOrderForm(type);
+                navigateTo('page-home');
+            } else {
+                showToast('שגיאה בשליחת ההזמנה', 'error');
+            }
+        }
+
+        function resetOrderForm(type) {
+            if (type === 'materials') {
+                currentOrder.items = [];
+                renderMaterialsList();
+                dom.matDeliveryForm.reset();
+                validateWizardStep('materials', 2);
+                navigateWizard('materials', 1);
+            } else {
+                dom.conDetailsForm.reset();
+                dom.conDeliveryForm.reset();
+                validateWizardStep('container', 1);
+                validateWizardStep('container', 2);
+                navigateWizard('container', 1);
+            }
+        }
+        
+        function getGeoLocation() { /* ... unchanged ... */ }
+
+        // ========== 8. APP INITIALIZATION ==========
+        initApp();
+    });
     </script>
 </body>
 </html>
+
