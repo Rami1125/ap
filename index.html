@@ -164,7 +164,7 @@
 
         // ========== 2. STATE & CONFIG ==========
         let clientState = { id: 'mock_client_123', name: 'רמי לוי' }; // Mock data, replace with real login
-        let currentOrder = { type: 'materials', items: [], deliveryDetails: {} };
+        let currentOrder = { type: 'materials', items: [], deliveryDetails: {}, details: {} };
         let currentPageId = 'page-home';
         const dom = {};
 
@@ -198,7 +198,8 @@
             if (order.type === 'חומרי בנין') {
                 msg += '*פירוט פריטים:*\n' + order.items.map((item, i) => `${i + 1}. ${item.product} (כמות: *${item.quantity}*)`).join('\n');
             } else { // Container
-                msg += `*פרטי מכולה:*\n*סוג:* ${order.details.type}\n*ימים:* ${order.details.rentalDays}`;
+                const typeText = dom.containerType.options[dom.containerType.selectedIndex].text;
+                msg += `*פרטי מכולה:*\n*סוג:* ${typeText}\n*ימים:* ${order.details.rentalDays}`;
             }
             return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
         }
@@ -223,28 +224,35 @@
                 pages: document.querySelectorAll('.page'), navButtons: document.querySelectorAll('.nav-btn'),
                 greeting: document.getElementById('greeting'), homeContent: document.getElementById('home-content'),
                 
-                // Order Page
                 orderTypeTabs: document.querySelector('.order-type-tabs'),
                 materialsWizard: document.getElementById('materials-wizard'),
                 containerWizard: document.getElementById('container-wizard'),
 
-                // Materials Wizard
                 materialsProgress: document.getElementById('materials-progress'),
                 materialInput: document.getElementById('material-input'),
                 materialsList: document.getElementById('materials-list-container'),
                 matStep1Next: document.getElementById('materials-step1-next'),
                 matDeliveryForm: document.getElementById('materials-delivery-form'),
+                matContactPerson: document.getElementById('mat-contact-person'),
+                matContactPhone: document.getElementById('mat-contact-phone'),
+                matDeliveryAddress: document.getElementById('mat-delivery-address'),
+                matAddLocationBtn: document.getElementById('mat-add-location-btn'),
                 matStep2Back: document.getElementById('materials-step2-back'),
                 matStep2Next: document.getElementById('materials-step2-next'),
                 matSummary: document.getElementById('materials-summary'),
                 matStep3Back: document.getElementById('materials-step3-back'),
                 submitMatOrder: document.getElementById('submit-material-order-btn'),
                 
-                // Container Wizard
                 containerProgress: document.getElementById('container-progress'),
                 conDetailsForm: document.getElementById('container-details-form'),
+                containerType: document.getElementById('container-type'),
+                rentalDays: document.getElementById('rental-days'),
                 conStep1Next: document.getElementById('container-step1-next'),
                 conDeliveryForm: document.getElementById('container-delivery-form'),
+                conContactPerson: document.getElementById('con-contact-person'),
+                conContactPhone: document.getElementById('con-contact-phone'),
+                conDeliveryAddress: document.getElementById('con-delivery-address'),
+                conAddLocationBtn: document.getElementById('con-add-location-btn'),
                 conStep2Back: document.getElementById('container-step2-back'),
                 conStep2Next: document.getElementById('container-step2-next'),
                 conSummary: document.getElementById('container-summary'),
@@ -278,18 +286,31 @@
             dom.materialsList.addEventListener('click', handleMaterialsListClick);
             dom.matDeliveryForm.addEventListener('input', () => validateWizardStep('materials', 2));
             dom.submitMatOrder.addEventListener('click', () => handleOrderSubmit('materials'));
-            
+            dom.matAddLocationBtn.addEventListener('click', () => getGeoLocation('materials'));
+
+
             // Container Events
             dom.conStep1Next.addEventListener('click', () => navigateWizard('container', 2));
             dom.conDetailsForm.addEventListener('input', () => validateWizardStep('container', 1));
             dom.conStep2Back.addEventListener('click', () => navigateWizard('container', 1));
-            dom.conStep2Next.addEventListener('click', () => { renderSummary('container'); navigateWizard('container', 2); }); // Note: container has 2 steps to summary
+            dom.conStep2Next.addEventListener('click', () => { renderSummary('container'); navigateWizard('container', 3); });
             dom.conDeliveryForm.addEventListener('input', () => validateWizardStep('container', 2));
             dom.conStep3Back.addEventListener('click', () => navigateWizard('container', 2));
             dom.submitConOrder.addEventListener('click', () => handleOrderSubmit('container'));
+            dom.conAddLocationBtn.addEventListener('click', () => getGeoLocation('container'));
         }
 
         // ========== 6. PAGE LOGIC & RENDERING ==========
+        function initApp() {
+            if(!cacheDomElements()) return; // Stop if elements are missing
+            document.body.classList.add('loaded');
+            dom.appShell.style.display = 'flex';
+            setupEventListeners();
+            setupNotificationsForClient(clientState.id);
+            renderAllPages();
+            navigateTo('page-home', true);
+        }
+
         function navigateTo(pageId, isInitial = false) {
              if (!isInitial && pageId === currentPageId) return;
             dom.pages.forEach(p => p.classList.remove('active'));
@@ -322,56 +343,24 @@
         function navigateWizard(wizard, step) {
             document.querySelectorAll(`#${wizard}-wizard .wizard-step`).forEach(s => s.classList.remove('active'));
             document.getElementById(`${wizard}-step-${step}`)?.classList.add('active');
-            dom[`${wizard}Progress`].style.width = wizard === 'materials' ? `${step * 33.3}%` : `${step * 50}%`;
+            dom[`${wizard}Progress`].style.width = wizard === 'materials' ? `${step * 33.3}%` : `${step * 33.3}%`; // Both have 3 steps now
             if (navigator.vibrate) navigator.vibrate(50);
         }
 
-        // --- Materials ---
-        function handleMaterialAdd() {
-            const productName = dom.materialInput.value.trim();
-            if (productName) {
-                currentOrder.items.push({ product: productName, quantity: 1 });
-                renderMaterialsList();
-                dom.materialInput.value = ''; dom.materialInput.focus();
-            }
-        }
-        function renderMaterialsList() {
-            if (currentOrder.items.length === 0) {
-                dom.materialsList.innerHTML = `<p style="text-align: center; color: var(--text-muted);">רשימת המוצרים שלך תופיע כאן.</p>`;
-            } else {
-                dom.materialsList.innerHTML = currentOrder.items.map((item, i) => `
-                    <div class="material-item"><span class="material-name">${i + 1}. ${item.product}</span>
-                    <div class="quantity-control">
-                        <button class="quantity-btn" data-index="${i}" data-op="-">-</button>
-                        <input type="number" class="material-quantity" value="${item.quantity}" readonly>
-                        <button class="quantity-btn" data-index="${i}" data-op="+">+</button>
-                    </div>
-                    <button class="material-delete-btn" data-index="${i}">✖</button></div>`).join('');
-            }
-            dom.matStep1Next.disabled = currentOrder.items.length === 0;
-        }
-        function handleMaterialsListClick(e) {
-            const target = e.target;
-            const index = parseInt(target.dataset.index);
-            if (target.classList.contains('material-delete-btn')) currentOrder.items.splice(index, 1);
-            else if (target.classList.contains('quantity-btn')) {
-                const op = target.dataset.op;
-                if (op === '+') currentOrder.items[index].quantity++;
-                else currentOrder.items[index].quantity = Math.max(1, currentOrder.items[index].quantity - 1);
-            } else return;
-            renderMaterialsList();
-        }
-         function validateWizardStep(wizard, step) {
+        function validateWizardStep(wizard, step) {
             let isValid = false;
             if (wizard === 'materials' && step === 2) {
                 isValid = dom.matContactPerson.value.trim() && dom.matContactPhone.value.trim() && dom.matDeliveryAddress.value.trim();
+                dom.matStep2Next.disabled = !isValid;
             } else if (wizard === 'container' && step === 1) {
-                isValid = dom.containerType.value !== "";
+                isValid = dom.containerType.value !== "" && dom.rentalDays.value > 0;
+                dom.conStep1Next.disabled = !isValid;
             } else if (wizard === 'container' && step === 2) {
                 isValid = dom.conContactPerson.value.trim() && dom.conContactPhone.value.trim() && dom.conDeliveryAddress.value.trim();
+                dom.conStep2Next.disabled = !isValid;
             }
-            dom[`${wizard}Step${step}Next`].disabled = !isValid;
         }
+
         function renderSummary(type) {
             if (type === 'materials') {
                 const details = { contactPerson: dom.matContactPerson.value, contactPhone: dom.matContactPhone.value, deliveryAddress: dom.matDeliveryAddress.value };
@@ -383,6 +372,7 @@
                  currentOrder.deliveryDetails = details;
                  const conType = dom.containerType.options[dom.containerType.selectedIndex].text;
                  const rentDays = dom.rentalDays.value;
+                 currentOrder.details = { type: conType, rentalDays: rentDays };
                  dom.conSummary.innerHTML = `<p><strong>איש קשר:</strong> ${details.contactPerson} (${details.contactPhone})</p><p><strong>כתובת:</strong> ${details.deliveryAddress}</p><h4 style="margin-top: 15px;">פרטי מכולה:</h4><pre>סוג: ${conType}\nימי שכירות: ${rentDays}</pre>`;
             }
         }
@@ -393,11 +383,11 @@
                 type: type === 'materials' ? 'חומרי בנין' : 'מכולה',
                 clientName: clientState.name,
                 deliveryDetails: currentOrder.deliveryDetails,
-                details: type === 'container' ? { type: dom.containerType.value, rentalDays: dom.rentalDays.value } : null,
+                details: type === 'container' ? currentOrder.details : null,
                 items: type === 'materials' ? currentOrder.items : null
             };
             
-            const success = await sendRequestToDashboard(clientState, orderData.type, orderData);
+            const success = await sendRequestToDashboard(orderData.type, orderData);
             if (success) {
                 window.open(generateWhatsAppLink(orderData), '_blank');
                 showToast('הזמנה נשלחה בהצלחה!', 'success');
@@ -424,11 +414,69 @@
             }
         }
         
-        function getGeoLocation() { /* ... unchanged ... */ }
+        function getGeoLocation(formType) {
+            if (!navigator.geolocation) return showToast("שירותי מיקום לא נתמכים.", 'warning');
+            showToast("מאתר מיקום...", 'info');
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const { latitude, longitude } = position.coords;
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                    const data = await response.json();
+                    const addressField = formType === 'materials' ? dom.matDeliveryAddress : dom.conDeliveryAddress;
+                    if (addressField) {
+                        addressField.value = data.display_name || `קואורדינטות: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                        validateWizardStep(formType, 2);
+                    }
+                    showToast("המיקום עודכן!", 'success');
+                } catch (error) {
+                    showToast("שגיאה באחזור כתובת", 'error');
+                }
+            }, () => showToast("לא ניתן היה לקבל את מיקומך.", 'error'));
+        }
+        
+        function handleMaterialAdd() {
+            const productName = dom.materialInput.value.trim();
+            if (productName) {
+                currentOrder.items.push({ product: productName, quantity: 1 });
+                renderMaterialsList();
+                dom.materialInput.value = '';
+                dom.materialInput.focus();
+            }
+        }
+
+        function renderMaterialsList() {
+            if (currentOrder.items.length === 0) {
+                dom.materialsList.innerHTML = `<p style="text-align: center; color: var(--text-muted);">רשימת המוצרים שלך תופיע כאן.</p>`;
+            } else {
+                dom.materialsList.innerHTML = currentOrder.items.map((item, i) => `
+                    <div class="material-item"><span class="material-name">${i + 1}. ${item.product}</span>
+                    <div class="quantity-control">
+                        <button class="quantity-btn" data-index="${i}" data-op="-">-</button>
+                        <input type="number" class="material-quantity" value="${item.quantity}" readonly>
+                        <button class="quantity-btn" data-index="${i}" data-op="+">+</button>
+                    </div>
+                    <button class="material-delete-btn" data-index="${i}">✖</button></div>`).join('');
+            }
+            dom.matStep1Next.disabled = currentOrder.items.length === 0;
+        }
+
+        function handleMaterialsListClick(e) {
+            const target = e.target;
+            const index = parseInt(target.dataset.index);
+            if(isNaN(index)) return;
+
+            if (target.classList.contains('material-delete-btn')) currentOrder.items.splice(index, 1);
+            else if (target.classList.contains('quantity-btn')) {
+                const op = target.dataset.op;
+                if (op === '+') currentOrder.items[index].quantity++;
+                else currentOrder.items[index].quantity = Math.max(1, currentOrder.items[index].quantity - 1);
+            } else return;
+            renderMaterialsList();
+        }
+
 
         // ========== 8. APP INITIALIZATION ==========
-        initApp();
-    });
+        document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
