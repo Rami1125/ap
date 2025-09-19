@@ -1,0 +1,181 @@
+const SHEET_ID = "1qeOFZHt1SX_D9teCf9JxcGPWhIU419O5-6EsKmws1LM";
+const WHATSAPP_NUMBER = "972508860896";
+
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('טופס הזמנה חדשה')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function saveOrder(orderData) {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName("הזמנות") || ss.insertSheet("הזמנות");
+    
+    // Set headers if sheet is empty
+    if (sheet.getLastRow() === 0) {
+      const headers = [
+        "מספר הזמנה", "תאריך יצירה", "שם לקוח", "טלפון", "סוג אספקה", 
+        "תאריך אספקה", "שעת אספקה", "עיר", "רחוב", "מספר בית", 
+        "איש קשר", "טלפון איש קשר", "מוצרים", "הערות", "סטטוס"
+      ];
+      sheet.appendRow(headers);
+    }
+    
+    // Generate order number (last order + 1)
+    const lastOrder = sheet.getLastRow() > 1 ? sheet.getRange(sheet.getLastRow(), 1).getValue() : 0;
+    const orderNumber = lastOrder + 1;
+    const creationDate = new Date();
+    
+    // Prepare products string
+    const productsString = orderData.products.map(p => `${p.name} (${p.quantity})${p.note ? ` - ${p.note}` : ''}`).join(', ');
+    
+    // Prepare row data
+    const rowData = [
+      orderNumber,
+      creationDate,
+      orderData.customerName,
+      orderData.phone,
+      orderData.deliveryType,
+      orderData.deliveryDate,
+      orderData.deliveryTime,
+      orderData.city,
+      orderData.street,
+      orderData.houseNumber,
+      orderData.contactPerson,
+      orderData.contactPhone,
+      productsString,
+      orderData.notes,
+      "הזמנה חדשה"
+    ];
+    
+    sheet.appendRow(rowData);
+    
+    // Generate WhatsApp URL
+    const whatsappUrl = generateWhatsAppMessage(orderData, orderNumber);
+    
+    return { 
+      success: true, 
+      orderNumber: orderNumber,
+      whatsappUrl: whatsappUrl
+    };
+  } catch (e) {
+    Logger.log(e);
+    return { success: false, error: e.message };
+  }
+}
+
+function generateWhatsAppMessage(orderData, orderNumber) {
+  try {
+    const message = `הזמנה חדשה #${orderNumber}\n` +
+      `שם לקוח: ${orderData.customerName}\n` +
+      `טלפון: ${orderData.phone}\n` +
+      `סוג אספקה: ${orderData.deliveryType}\n` +
+      `תאריך אספקה: ${orderData.deliveryDate} בשעה ${orderData.deliveryTime}\n` +
+      `כתובת: ${orderData.street} ${orderData.houseNumber}, ${orderData.city}\n` +
+      `איש קשר: ${orderData.contactPerson || 'אין'} (${orderData.contactPhone || 'אין'})\n\n` +
+      `מוצרים:\n${orderData.products.map(p => `- ${p.name} (${p.quantity})${p.note ? ` - ${p.note}` : ''}`).join('\n')}\n\n` +
+      `הערות: ${orderData.notes || 'אין'}`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
+  } catch (e) {
+    Logger.log(e);
+    return null;
+  }
+}
+
+function getProducts() {
+  const products = [
+    { name: "רוקבונד פח", category: "חומרים" },
+    { name: "חול שק", category: "חומרים" },
+    { name: "חול שק גדול", category: "חומרים" },
+    { name: "סומסום שק", category: "חומרים" },
+    { name: "סומסום שק גדול", category: "חומרים" },
+    { name: "טיט שק", category: "חומרים" },
+    { name: "טיט שק גדול", category: "חומרים" },
+    { name: "שליט מוכן", category: "חומרים" },
+    { name: "חצץ שק", category: "חומרים" },
+    { name: "חצץ שק גדול", category: "חומרים" },
+    { name: "בלוק,7 ס\"מ", category: "בלוקים" },
+    { name: "בלוק,10 ס\"מ", category: "בלוקים" },
+    { name: "בלוק,15 ס\"מ", category: "בלוקים" },
+    { name: "בלוק,20 ס\"מ", category: "בלוקים" },
+    { name: "בלוק,22 ס\"מ", category: "בלוקים" },
+    { name: "בלוק,25 ס\"מ", category: "בלוקים" },
+    { name: "בלוק,וופלה 3 ס\"מ", category: "בלוקים" },
+    { name: "בלוק,וופלה 4 ס\"מ", category: "בלוקים" },
+    { name: "מלט,אפור 25 ק\"ג", category: "מלט וגבס" },
+    { name: "מלט,לבן 25 ק\"ג", category: "מלט וגבס" },
+    { name: "גבס,שפכטל 25 ק\"ג", category: "מלט וגבס" },
+    { name: "טיח גבס,25 ק\"ג שק", category: "מלט וגבס" },
+    { name: "ברזל בניין,8 מ\"מ, 3 מטר", category: "ברזל" },
+    { name: "ברזל בניין,10 מ\"מ, 3 מטר", category: "ברזל" },
+    { name: "ברזל בניין,12 מ\"מ, 3 מטר", category: "ברזל" },
+    { name: "ברזל בניין,14 מ\"מ, 3 מטר", category: "ברזל" },
+    { name: "ברזל בניין,16 מ\"מ", category: "ברזל" },
+    { name: "רשת ברזל 6 מ\"מ,20x20 3X2", category: "ברזל" },
+    { name: "רשת ברזל 8 מ\"מ,20x20 3X2", category: "ברזל" },
+    { name: "רשת ברזל,10x10", category: "ברזל" },
+    { name: "לוח גבס,לבן 2.0", category: "גבס" },
+    { name: "לוח גבס,לבן 2.6", category: "גבס" },
+    { name: "לוח גבס,לבן 3.0", category: "גבס" },
+    { name: "לוח גבס,ירוק 2.0", category: "גבס" },
+    { name: "לוח גבס,ירוק 2.6", category: "גבס" },
+    { name: "לוח גבס,ירוק 3.0", category: "גבס" },
+    { name: "לוח גבס,ורוד 2.6", category: "גבס" },
+    { name: "לוח גבס,כחול 2.6", category: "גבס" },
+    { name: "לוח,OSB", category: "גבס" },
+    { name: "לוח,MDF", category: "גבס" },
+    { name: "לוח סנדוויץ',18 מ\"מ", category: "גבס" },
+    { name: "קרמיקה,לרצפה", category: "קרמיקה" },
+    { name: "קרמיקה,לקיר", category: "קרמיקה" },
+    { name: "פרקט,למינציה", category: "קרמיקה" },
+    { name: "פרקט,עץ", category: "קרמיקה" },
+    { name: "שיש,גרניט פורצלן", category: "קרמיקה" },
+    { name: "אריחי טרצו", category: "קרמיקה" },
+    { name: "אבן,טבעית", category: "קרמיקה" },
+    { name: "אבן,שיש", category: "קרמיקה" },
+    { name: "אבן,גרניט", category: "קרמיקה" },
+    { name: "צבע,לבן נירלט 18 ליטר", category: "צבע" },
+    { name: "צבע,לבן טמבור 18 ליטר", category: "צבע" },
+    { name: "פריימר S,18 ליטר", category: "צבע" },
+    { name: "צבע,לקיר פנימי", category: "צבע" },
+    { name: "צבע,לעץ", category: "צבע" },
+    { name: "צבע,למתכת", category: "צבע" },
+    { name: "צינור פלסטיק,1/2 אינץ'", category: "צנרת" },
+    { name: "צינור פלסטיק,3/4 אינץ'", category: "צנרת" },
+    { name: "צינור פלסטיק,1 אינץ'", category: "צנרת" },
+    { name: "צינור פלסטיק,2 אינץ'", category: "צנרת" },
+    { name: "צינור ביוב,4 אינץ'", category: "צנרת" },
+    { name: "צינור ביוב,6 אינץ'", category: "צנרת" },
+    { name: "דבק,603 קרמיקה 25 ק\"ג", category: "דבקים" },
+    { name: "דבק,פורצלן 25 ק\"ג", category: "דבקים" },
+    { name: "דבק,שיש 25 ק\"ג", category: "דבקים" },
+    { name: "רובה,לקרמיקה", category: "דבקים" },
+    { name: "רובה,לפורצלן", category: "דבקים" },
+    { name: "רובה,לשיש", category: "דבקים" },
+    { name: "מסלול 0.6 70/300", category: "ברזל למסגרות" },
+    { name: "מסלול 0.6 50/300", category: "ברזל למסגרות" },
+    { name: "מסלול 0.6 37/300", category: "ברזל למסגרות" },
+    { name: "מסלול 0.6 100/300", category: "ברזל למסגרות" },
+    { name: "מסלול 0.5 70/300", category: "ברזל למסגרות" },
+    { name: "מסלול 0.5 50/300", category: "ברזל למסגרות" },
+    { name: "מסלול 0.5 37/300", category: "ברזל למסגרות" },
+    { name: "מסלול 0.5 28/300", category: "ברזל למסגרות" },
+    { name: "מסלול 0.5 100/300", category: "ברזל למסגרות" },
+    { name: "מסלול אומגה תקן 300", category: "ברזל למסגרות" }
+  ];
+  
+  // Remove duplicates
+  const uniqueProducts = [];
+  const seen = new Set();
+  for (const product of products) {
+    if (!seen.has(product.name)) {
+      seen.add(product.name);
+      uniqueProducts.push(product);
+    }
+  }
+  
+  return uniqueProducts;
+}
