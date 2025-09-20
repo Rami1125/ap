@@ -186,10 +186,22 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
+            // =====================================================================
+            // ===> STEP 1: PASTE YOUR FIREBASE CONFIG OBJECT HERE <===
+            // =====================================================================
             const firebaseConfig = {
-                // Your Firebase config object here
+                // Example:
+                // apiKey: "AIza....",
+                // authDomain: "hsaban-644c5.firebaseapp.com",
+                // projectId: "hsaban-644c5",
+                // ...etc
             };
-            firebase.initializeApp(firebaseConfig);
+            // =====================================================================
+
+            // Initialize Firebase
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
             const db = firebase.firestore();
             const functions = firebase.functions();
             const auth = firebase.auth();
@@ -215,49 +227,83 @@
             };
 
             const dom = {
-                // Cache all DOM elements here
+                // Cache all DOM elements here for performance
             };
 
             function initApp() {
-                // Existing init logic, check for client ID in localStorage
-                // If found, call loadInitialData
-                // Else, show login modal
+                // Your existing init logic to check for a client ID in localStorage
+                // If found, call loadInitialData(clientId)
+                // Else, show the login modal to the user
+                console.log("App initialized. Waiting for login.");
+                // For now, let's simulate a login for testing:
+                 loadInitialData('601963'); // Using Eran's ID for demo
             }
 
             async function loadInitialData(clientId) {
-                // 1. Fetch client data (projects, orders) from your backend/sheet
-                // This is a placeholder for your existing data fetching logic
+                console.log(`Loading data for client: ${clientId}`);
+                // Here you would typically fetch client data (projects, orders) from your backend
+                // This is a placeholder for your existing data fetching logic.
+                // For demonstration, we will use mock data.
+                appState.clientId = clientId;
+                appState.clientName = "ערן אזולאי";
+                appState.projects = [
+                    { id: 'p1', name: 'העם הצרפתי', address: 'העם הצרפתי 64, רמת גן' },
+                    { id: 'p2', name: 'פרויקט תל אביב', address: 'רוטשילד 1, תל אביב' }
+                ];
+                appState.activeProject = appState.projects[0];
                 
-                // 2. Fetch the product catalog using our new Firebase Function
+                // Fetch the product catalog using our new Firebase Function
                 try {
                     const getProductCatalog = functions.httpsCallable('getProductCatalog');
                     const result = await getProductCatalog();
                     if (result.data.success) {
                         appState.productCatalog = result.data.catalog;
-                        console.log('Product catalog loaded:', appState.productCatalog.length, 'items');
+                        console.log('Product catalog loaded successfully:', appState.productCatalog.length, 'items');
                     } else {
                         showToast('שגיאה בטעינת קטלוג מוצרים', 'error');
+                        console.error('Failed to load catalog:', result.data.error);
                     }
                 } catch (error) {
-                    console.error("Error fetching product catalog:", error);
+                    console.error("Error fetching product catalog from Firebase Functions:", error);
                     showToast('שגיאה חמורה בטעינת קטלוג', 'error');
                 }
 
-                // 3. Render the initial state of the app
+                // Render the initial state of the app
                 renderApp();
             }
-
+            
             function renderApp() {
-                // Render all components based on the current appState
-                // renderHeader, renderDashboard, etc.
+                // This function would update the entire UI based on the current appState
+                // For example, update the greeting, project selector, etc.
+                const greeting = document.getElementById('greeting');
+                if (greeting) greeting.textContent = `בוקר טוב, ${appState.clientName.split(' ')[0]}`;
+                
+                const projectBtn = document.getElementById('project-selector-btn');
+                if (projectBtn && appState.activeProject) {
+                    projectBtn.textContent = appState.activeProject.name;
+                }
+                
+                // Hide splash screen and show the app
+                const splash = document.getElementById('splash-screen');
+                const appShell = document.getElementById('app-shell');
+                if(splash) splash.style.display = 'none';
+                if(appShell) appShell.classList.remove('hidden');
+
+                console.log("App rendered with initial data.");
             }
             
             function showToast(message, type = 'info') {
                 const toastContainer = document.getElementById('toast-container');
+                if (!toastContainer) return;
+                
                 const toast = document.createElement('div');
-                toast.className = `toast ${type === 'error' ? 'bg-red-600' : 'bg-slate-800'} show`;
+                toast.className = `toast ${type === 'error' ? 'bg-red-600' : 'bg-slate-800'}`;
                 toast.textContent = message;
+                
                 toastContainer.appendChild(toast);
+                
+                setTimeout(() => toast.classList.add('show'), 10);
+                
                 setTimeout(() => {
                     toast.classList.remove('show');
                     toast.addEventListener('transitionend', () => toast.remove());
@@ -268,8 +314,9 @@
             // setupEventListeners, form navigation logic, product search,
             // render steps, submit order logic, etc.
             
-            // initApp(); // Start the application
-            showToast('ברוכים הבאים! האפליקציה בטעינה.', 'info');
+            // Start the application
+            initApp();
+            
         });
     </script>
 </body>
