@@ -1,181 +1,1108 @@
-const SHEET_ID = "1qeOFZHt1SX_D9teCf9JxcGPWhIU419O5-6EsKmws1LM";
-const WHATSAPP_NUMBER = "972508860896";
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>אזור אישי - ח.סבן</title>
+    <meta name="theme-color" content="#0b72b9"/>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="https://i.postimg.cc/2SbDgD1B/1.png">
+    <link rel="icon" href="https://i.postimg.cc/2SbDgD1B/1.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js"></script>
+    
+    <style>
+        :root {
+            --brand: #0b72b9;
+            --accent: #ff9f1c;
+            --success: #38a169;
+            --warning: #dd6b20;
+            --danger: #e53e3e;
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --text-dark: #1a202c;
+            --text-light: #4a5568;
+            --text-muted: #718096;
+            --border: #e2e8f0;
+            --radius: 16px;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --glass-bg: rgba(255, 255, 255, 0.8);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --transition: all 0.3s ease;
+        }
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('טופס הזמנה חדשה')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
+        [data-theme="dark"] {
+            --bg: #1a202c;
+            --card: #2d3748;
+            --text-dark: #f7fafc;
+            --text-light: #e2e8f0;
+            --text-muted: #a0aec0;
+            --border: #4a5568;
+            --glass-bg: rgba(26, 32, 44, 0.8);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
 
-function saveOrder(orderData) {
-  try {
-    const ss = SpreadsheetApp.openById(SHEET_ID);
-    const sheet = ss.getSheetByName("הזמנות") || ss.insertSheet("הזמנות");
-    
-    // Set headers if sheet is empty
-    if (sheet.getLastRow() === 0) {
-      const headers = [
-        "מספר הזמנה", "תאריך יצירה", "שם לקוח", "טלפון", "סוג אספקה", 
-        "תאריך אספקה", "שעת אספקה", "עיר", "רחוב", "מספר בית", 
-        "איש קשר", "טלפון איש קשר", "מוצרים", "הערות", "סטטוס"
-      ];
-      sheet.appendRow(headers);
-    }
-    
-    // Generate order number (last order + 1)
-    const lastOrder = sheet.getLastRow() > 1 ? sheet.getRange(sheet.getLastRow(), 1).getValue() : 0;
-    const orderNumber = lastOrder + 1;
-    const creationDate = new Date();
-    
-    // Prepare products string
-    const productsString = orderData.products.map(p => `${p.name} (${p.quantity})${p.note ? ` - ${p.note}` : ''}`).join(', ');
-    
-    // Prepare row data
-    const rowData = [
-      orderNumber,
-      creationDate,
-      orderData.customerName,
-      orderData.phone,
-      orderData.deliveryType,
-      orderData.deliveryDate,
-      orderData.deliveryTime,
-      orderData.city,
-      orderData.street,
-      orderData.houseNumber,
-      orderData.contactPerson,
-      orderData.contactPhone,
-      productsString,
-      orderData.notes,
-      "הזמנה חדשה"
-    ];
-    
-    sheet.appendRow(rowData);
-    
-    // Generate WhatsApp URL
-    const whatsappUrl = generateWhatsAppMessage(orderData, orderNumber);
-    
-    return { 
-      success: true, 
-      orderNumber: orderNumber,
-      whatsappUrl: whatsappUrl
-    };
-  } catch (e) {
-    Logger.log(e);
-    return { success: false, error: e.message };
-  }
-}
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
 
-function generateWhatsAppMessage(orderData, orderNumber) {
-  try {
-    const message = `הזמנה חדשה #${orderNumber}\n` +
-      `שם לקוח: ${orderData.customerName}\n` +
-      `טלפון: ${orderData.phone}\n` +
-      `סוג אספקה: ${orderData.deliveryType}\n` +
-      `תאריך אספקה: ${orderData.deliveryDate} בשעה ${orderData.deliveryTime}\n` +
-      `כתובת: ${orderData.street} ${orderData.houseNumber}, ${orderData.city}\n` +
-      `איש קשר: ${orderData.contactPerson || 'אין'} (${orderData.contactPhone || 'אין'})\n\n` +
-      `מוצרים:\n${orderData.products.map(p => `- ${p.name} (${p.quantity})${p.note ? ` - ${p.note}` : ''}`).join('\n')}\n\n` +
-      `הערות: ${orderData.notes || 'אין'}`;
-    
-    const encodedMessage = encodeURIComponent(message);
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
-  } catch (e) {
-    Logger.log(e);
-    return null;
-  }
-}
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg);
+            font-family: 'Assistant', sans-serif;
+            color: var(--text-dark);
+            transition: var(--transition);
+        }
 
-function getProducts() {
-  const products = [
-    { name: "רוקבונד פח", category: "חומרים" },
-    { name: "חול שק", category: "חומרים" },
-    { name: "חול שק גדול", category: "חומרים" },
-    { name: "סומסום שק", category: "חומרים" },
-    { name: "סומסום שק גדול", category: "חומרים" },
-    { name: "טיט שק", category: "חומרים" },
-    { name: "טיט שק גדול", category: "חומרים" },
-    { name: "שליט מוכן", category: "חומרים" },
-    { name: "חצץ שק", category: "חומרים" },
-    { name: "חצץ שק גדול", category: "חומרים" },
-    { name: "בלוק,7 ס\"מ", category: "בלוקים" },
-    { name: "בלוק,10 ס\"מ", category: "בלוקים" },
-    { name: "בלוק,15 ס\"מ", category: "בלוקים" },
-    { name: "בלוק,20 ס\"מ", category: "בלוקים" },
-    { name: "בלוק,22 ס\"מ", category: "בלוקים" },
-    { name: "בלוק,25 ס\"מ", category: "בלוקים" },
-    { name: "בלוק,וופלה 3 ס\"מ", category: "בלוקים" },
-    { name: "בלוק,וופלה 4 ס\"מ", category: "בלוקים" },
-    { name: "מלט,אפור 25 ק\"ג", category: "מלט וגבס" },
-    { name: "מלט,לבן 25 ק\"ג", category: "מלט וגבס" },
-    { name: "גבס,שפכטל 25 ק\"ג", category: "מלט וגבס" },
-    { name: "טיח גבס,25 ק\"ג שק", category: "מלט וגבס" },
-    { name: "ברזל בניין,8 מ\"מ, 3 מטר", category: "ברזל" },
-    { name: "ברזל בניין,10 מ\"מ, 3 מטר", category: "ברזל" },
-    { name: "ברזל בניין,12 מ\"מ, 3 מטר", category: "ברזל" },
-    { name: "ברזל בניין,14 מ\"מ, 3 מטר", category: "ברזל" },
-    { name: "ברזל בניין,16 מ\"מ", category: "ברזל" },
-    { name: "רשת ברזל 6 מ\"מ,20x20 3X2", category: "ברזל" },
-    { name: "רשת ברזל 8 מ\"מ,20x20 3X2", category: "ברזל" },
-    { name: "רשת ברזל,10x10", category: "ברזל" },
-    { name: "לוח גבס,לבן 2.0", category: "גבס" },
-    { name: "לוח גבס,לבן 2.6", category: "גבס" },
-    { name: "לוח גבס,לבן 3.0", category: "גבס" },
-    { name: "לוח גבס,ירוק 2.0", category: "גבס" },
-    { name: "לוח גבס,ירוק 2.6", category: "גבס" },
-    { name: "לוח גבס,ירוק 3.0", category: "גבס" },
-    { name: "לוח גבס,ורוד 2.6", category: "גבס" },
-    { name: "לוח גבס,כחול 2.6", category: "גבס" },
-    { name: "לוח,OSB", category: "גבס" },
-    { name: "לוח,MDF", category: "גבס" },
-    { name: "לוח סנדוויץ',18 מ\"מ", category: "גבס" },
-    { name: "קרמיקה,לרצפה", category: "קרמיקה" },
-    { name: "קרמיקה,לקיר", category: "קרמיקה" },
-    { name: "פרקט,למינציה", category: "קרמיקה" },
-    { name: "פרקט,עץ", category: "קרמיקה" },
-    { name: "שיש,גרניט פורצלן", category: "קרמיקה" },
-    { name: "אריחי טרצו", category: "קרמיקה" },
-    { name: "אבן,טבעית", category: "קרמיקה" },
-    { name: "אבן,שיש", category: "קרמיקה" },
-    { name: "אבן,גרניט", category: "קרמיקה" },
-    { name: "צבע,לבן נירלט 18 ליטר", category: "צבע" },
-    { name: "צבע,לבן טמבור 18 ליטר", category: "צבע" },
-    { name: "פריימר S,18 ליטר", category: "צבע" },
-    { name: "צבע,לקיר פנימי", category: "צבע" },
-    { name: "צבע,לעץ", category: "צבע" },
-    { name: "צבע,למתכת", category: "צבע" },
-    { name: "צינור פלסטיק,1/2 אינץ'", category: "צנרת" },
-    { name: "צינור פלסטיק,3/4 אינץ'", category: "צנרת" },
-    { name: "צינור פלסטיק,1 אינץ'", category: "צנרת" },
-    { name: "צינור פלסטיק,2 אינץ'", category: "צנרת" },
-    { name: "צינור ביוב,4 אינץ'", category: "צנרת" },
-    { name: "צינור ביוב,6 אינץ'", category: "צנרת" },
-    { name: "דבק,603 קרמיקה 25 ק\"ג", category: "דבקים" },
-    { name: "דבק,פורצלן 25 ק\"ג", category: "דבקים" },
-    { name: "דבק,שיש 25 ק\"ג", category: "דבקים" },
-    { name: "רובה,לקרמיקה", category: "דבקים" },
-    { name: "רובה,לפורצלן", category: "דבקים" },
-    { name: "רובה,לשיש", category: "דבקים" },
-    { name: "מסלול 0.6 70/300", category: "ברזל למסגרות" },
-    { name: "מסלול 0.6 50/300", category: "ברזל למסגרות" },
-    { name: "מסלול 0.6 37/300", category: "ברזל למסגרות" },
-    { name: "מסלול 0.6 100/300", category: "ברזל למסגרות" },
-    { name: "מסלול 0.5 70/300", category: "ברזל למסגרות" },
-    { name: "מסלול 0.5 50/300", category: "ברזל למסגרות" },
-    { name: "מסלול 0.5 37/300", category: "ברזל למסגרות" },
-    { name: "מסלול 0.5 28/300", category: "ברזל למסגרות" },
-    { name: "מסלול 0.5 100/300", category: "ברזל למסגרות" },
-    { name: "מסלול אומגה תקן 300", category: "ברזל למסגרות" }
-  ];
-  
-  // Remove duplicates
-  const uniqueProducts = [];
-  const seen = new Set();
-  for (const product of products) {
-    if (!seen.has(product.name)) {
-      seen.add(product.name);
-      uniqueProducts.push(product);
-    }
-  }
-  
-  return uniqueProducts;
-}
+        body {
+            display: flex;
+            flex-direction: column;
+            overscroll-behavior-y: contain;
+        }
+
+        .app-shell {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .app-header {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--glass-border);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            z-index: 100;
+        }
+
+        .profile-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .profile-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            object-fit: cover;
+        }
+
+        .header-info {
+            text-align: center;
+            font-weight: 600;
+        }
+
+        #clock {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        #date {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .app-container {
+            flex-grow: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .page {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            padding: 20px 15px 120px 15px;
+            background-color: var(--bg);
+            visibility: hidden;
+            opacity: 0;
+            transition: var(--transition);
+        }
+
+        .page.active {
+            visibility: visible;
+            opacity: 1;
+            transform: translateX(0);
+            z-index: 5;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background-color: var(--card);
+            display: flex;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .nav-btn {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .nav-btn.active {
+            color: var(--brand);
+        }
+
+        .nav-btn svg {
+            width: 28px;
+            height: 28px;
+            pointer-events: none;
+        }
+
+        .card {
+            background-color: var(--card);
+            border-radius: var(--radius);
+            padding: 20px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+            animation: popIn 0.5s ease-out forwards;
+            overflow: hidden;
+            transition: var(--transition);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn {
+            background: var(--brand);
+            color: white;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 15px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn:after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%);
+            transform-origin: 50% 50%;
+        }
+
+        .btn:focus:not(:active)::after {
+            animation: ripple 1s ease-out;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn.secondary {
+            background-color: var(--bg);
+            color: var(--text-dark);
+            border: 1px solid var(--border);
+        }
+
+        .mini-map-container {
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            height: 150px;
+            width: 100%;
+            margin-top: 15px;
+            background-color: #eee;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mini-map-container.loading:after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230b72b9' stroke-width='2'%3E%3Cpath d='M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83'/%3E%3C/svg%3E") center no-repeat;
+            background-size: 30px;
+        }
+
+        .leaflet-control-zoom, .leaflet-control-attribution {
+            display: none !important;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-content {
+            background-color: var(--card);
+            padding: 25px;
+            border-radius: var(--radius);
+            width: 90%;
+            max-width: 500px;
+            animation: popIn 0.3s;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            left: 15px;
+            right: 15px;
+            z-index: 4000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .toast {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            max-width: 400px;
+            background: var(--card);
+            color: var(--text-dark);
+            padding: 14px 22px;
+            border-radius: var(--radius);
+            font-weight: 600;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            border: 1px solid var(--border);
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        #splash-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background-color: var(--bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+
+        #splash-logo {
+            width: 120px;
+            animation: pulse 1.5s infinite;
+        }
+
+        .splash-loader {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(11, 114, 185, 0.2);
+            border-top-color: var(--brand);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-top: 20px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #splash-screen.loading .splash-loader {
+            opacity: 1;
+        }
+
+        /* Assistant Styles */
+        .assistant-container {
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .assistant-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--brand);
+            color: white;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(11, 114, 185, 0.3);
+            transition: var(--transition);
+        }
+
+        .assistant-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .assistant-panel {
+            position: absolute;
+            bottom: 70px;
+            right: 0;
+            width: 300px;
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            padding: 20px;
+            display: none;
+        }
+
+        .assistant-panel.open {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .assistant-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .assistant-action {
+            padding: 12px 15px;
+            background: var(--bg);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .assistant-action:hover {
+            background: rgba(11, 114, 185, 0.1);
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        @keyframes ripple {
+            0% {
+                transform: scale(0, 0);
+                opacity: 1;
+            }
+            20% {
+                transform: scale(25, 25);
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+                transform: scale(40, 40);
+            }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .app-header {
+                flex-direction: column;
+                gap: 10px;
+                padding: 15px 10px;
+            }
+            
+            .page {
+                padding: 15px 10px 100px 10px;
+            }
+            
+            .card {
+                padding: 15px;
+            }
+            
+            .bottom-nav {
+                height: 70px;
+            }
+            
+            .nav-btn span {
+                font-size: 12px;
+            }
+            
+            .assistant-container {
+                bottom: 80px;
+                right: 15px;
+            }
+            
+            .assistant-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+            }
+            
+            .assistant-panel {
+                width: 280px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .page-title {
+                font-size: 24px;
+            }
+            
+            .btn {
+                padding: 10px 15px;
+                font-size: 14px;
+            }
+            
+            .assistant-panel {
+                width: 90vw;
+                right: 5vw;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell" style="display: none;">
+        <header class="app-header">
+            <div class="profile-container">
+                <img id="profile-avatar" src="" alt="Profile" class="profile-avatar">
+                <div>
+                    <div id="client-name-header" style="font-weight: 700; font-size: 16px;">...</div>
+                    <div id="client-status" style="font-size: 12px; color: var(--text-muted);">מחובר</div>
+                </div>
+            </div>
+            <div class="header-info">
+                <div id="clock"></div>
+                <div id="date"></div>
+            </div>
+        </header>
+
+        <main class="app-container" id="app-container">
+            <div id="page-home" class="page">
+                <h1 class="page-title" id="greeting"></h1>
+                <div id="active-orders-container"></div>
+            </div>
+            <div id="page-history" class="page">
+                <h1 class="page-title">היסטוריית הזמנות</h1>
+                <div id="history-content"></div>
+            </div>
+            <div id="page-profile" class="page">
+                <h1 class="page-title">הפרופיל שלי</h1>
+                <div class="card">
+                    <h3>פרטי משתמש</h3>
+                    <div id="user-details"></div>
+                </div>
+                <div class="card">
+                    <h3>הגדרות</h3>
+                    <div class="form-group">
+                        <label class="form-label">התראות Push</label>
+                        <label class="switch">
+                            <input type="checkbox" id="notifications-toggle" checked>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">מצב כהה</label>
+                        <label class="switch">
+                            <input type="checkbox" id="dark-mode-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <nav class="bottom-nav">
+            <button class="nav-btn" data-action="navigate" data-page="page-home">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <span>דף הבית</span>
+            </button>
+            <button class="nav-btn" data-action="navigate" data-page="page-history">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+                <span>היסטוריה</span>
+            </button>
+            <button class="nav-btn" data-action="navigate" data-page="page-profile">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                <span>פרופיל</span>
+            </button>
+        </nav>
+    </div>
+    
+    <!-- Assistant -->
+    <div class="assistant-container">
+        <button class="assistant-btn" id="assistant-btn">🤖</button>
+        <div class="assistant-panel" id="assistant-panel">
+            <h3>Assistant</h3>
+            <p>How can I help you today?</p>
+            <div class="assistant-actions">
+                <div class="assistant-action" data-action="view-orders">
+                    <span>📋</span>
+                    <span>View my orders</span>
+                </div>
+                <div class="assistant-action" data-action="change-status">
+                    <span>🔄</span>
+                    <span>Change order status</span>
+                </div>
+                <div class="assistant-action" data-action="contact-support">
+                    <span>📞</span>
+                    <span>Contact support</span>
+                </div>
+                <div class="assistant-action" data-action="get-directions">
+                    <span>🗺️</span>
+                    <span>Get directions</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="splash-screen"><img id="splash-logo" src="https://i.postimg.cc/2SbDgD1B/1.png" alt="לוגו ח.סבן"><div class="splash-loader"></div></div>
+    <div id="toast-container"></div>
+    <div id="modal-container" class="modal-overlay"></div>
+
+    <script type="module">
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
+            authDomain: "hsaban94-cc777.firebaseapp.com",
+            projectId: "hsaban94-cc777",
+            storageBucket: "hsaban94-cc777.appspot.com",
+            messagingSenderId: "299206369469",
+            appId: "1:299206369469:web:50ca90c58f1981ec9457d4"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.getFirestore(app);
+        const messaging = firebase.getMessaging(app);
+
+        // Main Application Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.classList.add('loaded');
+
+            const API_URL = "https://script.google.com/macros/s/AKfycbz5zkASUR1Ye1ZzYvPDvq4VhZegvZHzG5vdczLEaahcw_NDO2D9vb_4sGVYFrjrHzc/exec";
+            let clientState = { id: null, name: null, avatar: null, orders: [] };
+            let currentPageId = 'page-home';
+            const dom = {};
+
+            function initApp() {
+                cacheDomElements();
+                updateClock();
+                setInterval(updateClock, 1000);
+                
+                const storedClientId = localStorage.getItem('saban_client_id');
+                if (storedClientId) {
+                    dom.splashScreen.classList.add('loading');
+                    loadClientData(storedClientId);
+                } else {
+                    dom.splashScreen.style.display = 'none';
+                    promptForClientId();
+                }
+
+                // Setup assistant
+                dom.assistantBtn.addEventListener('click', toggleAssistant);
+                document.querySelectorAll('.assistant-action').forEach(action => {
+                    action.addEventListener('click', handleAssistantAction);
+                });
+
+                // Setup theme toggle
+                const darkModeToggle = document.getElementById('dark-mode-toggle');
+                const isDarkMode = localStorage.getItem('darkMode') === 'true';
+                document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+                darkModeToggle.checked = isDarkMode;
+
+                darkModeToggle.addEventListener('change', (e) => {
+                    const isDark = e.target.checked;
+                    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+                    localStorage.setItem('darkMode', isDark);
+                });
+
+                // Setup notifications toggle
+                const notificationsToggle = document.getElementById('notifications-toggle');
+                const notificationsEnabled = localStorage.getItem('notifications') !== 'false';
+                notificationsToggle.checked = notificationsEnabled;
+
+                notificationsToggle.addEventListener('change', (e) => {
+                    const enabled = e.target.checked;
+                    localStorage.setItem('notifications', enabled);
+                    if (enabled) {
+                        setupPushNotifications();
+                    }
+                });
+            }
+            
+            function cacheDomElements(){
+                Object.assign(dom, {
+                    appShell: document.querySelector('.app-shell'),
+                    splashScreen: document.getElementById('splash-screen'),
+                    pages: document.querySelectorAll('.page'),
+                    navButtons: document.querySelectorAll('.nav-btn'),
+                    modalContainer: document.getElementById('modal-container'),
+                    toastContainer: document.getElementById('toast-container'),
+                    activeOrdersContainer: document.getElementById('active-orders-container'),
+                    greeting: document.getElementById('greeting'),
+                    clientNameHeader: document.getElementById('client-name-header'),
+                    clientStatus: document.getElementById('client-status'),
+                    profileAvatar: document.getElementById('profile-avatar'),
+                    clock: document.getElementById('clock'),
+                    date: document.getElementById('date'),
+                    historyContent: document.getElementById('history-content'),
+                    userDetails: document.getElementById('user-details'),
+                    assistantBtn: document.getElementById('assistant-btn'),
+                    assistantPanel: document.getElementById('assistant-panel')
+                });
+            }
+            
+            async function loadClientData(clientId) {
+                try {
+                    const data = await apiPost({ action: 'getClientData', identifier: clientId });
+                    if (data.status === 'error' || !data.clientName) throw new Error(data.message || "Client not found");
+                    
+                    clientState = { ...clientState, id: data.clientId, name: data.clientName, avatar: data.avatarUrl, orders: data.orders || [] };
+                    localStorage.setItem('saban_client_id', data.clientId);
+                    
+                    await playSplashScreenAnimation();
+                    dom.appShell.style.display = 'flex';
+                    setupEventListeners();
+                    navigateTo('page-home', true);
+                    renderAllPages();
+
+                    // Setup push notifications after user is logged in
+                    setupPushNotifications();
+
+                } catch (error) {
+                    console.error("Failed to load client data:", error);
+                    localStorage.removeItem('saban_client_id');
+                    promptForClientId();
+                    showToast("שגיאה בטעינת נתונים.", '❌');
+                }
+            }
+            
+            async function apiPost(body) {
+                const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(body) });
+                if (!response.ok) throw new Error('Network error');
+                return response.json();
+            }
+            
+            function promptForClientId() {
+                dom.splashScreen.style.display = 'none';
+                dom.modalContainer.innerHTML = `
+                    <div class="modal-content">
+                        <h3>ברוכים הבאים</h3>
+                        <p>כדי להתחבר, אנא הזן מספר לקוח או טלפון.</p>
+                        <form id="login-form">
+                            <input type="text" id="login-identifier" placeholder="מספר לקוח / טלפון" required class="form-input">
+                            <button type="submit" class="btn" style="width: 100%; margin-top: 15px;">התחבר</button>
+                        </form>
+                    </div>`;
+                dom.modalContainer.classList.add('show');
+                
+                document.getElementById('login-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const identifier = document.getElementById('login-identifier').value.trim();
+                    if (identifier) {
+                        dom.modalContainer.classList.remove('show');
+                        dom.splashScreen.style.display = 'flex';
+                        dom.splashScreen.classList.add('loading');
+                        loadClientData(identifier);
+                    }
+                });
+            }
+
+            function updateClock() {
+                const now = new Date();
+                dom.clock.textContent = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+                dom.date.textContent = now.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' });
+            }
+
+            async function playSplashScreenAnimation() {
+                 return new Promise(resolve => {
+                    setTimeout(() => {
+                        dom.splashScreen.style.opacity = '0';
+                        dom.splashScreen.addEventListener('transitionend', () => {
+                            dom.splashScreen.style.display = 'none';
+                            resolve();
+                        }, { once: true });
+                    }, 500);
+                });
+            }
+            
+            function navigateTo(pageId, isInitial = false) {
+                if (!isInitial && currentPageId === pageId) return;
+                const oldPage = document.getElementById(currentPageId);
+                const newPage = document.getElementById(pageId);
+                if (isInitial) {
+                    newPage.classList.add('active');
+                } else {
+                    oldPage.classList.remove('active');
+                    newPage.classList.add('active');
+                }
+                currentPageId = pageId;
+                dom.navButtons.forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
+            }
+
+            function renderAllPages() {
+                renderHeaderAndGreeting();
+                renderHomePage();
+                renderHistoryPage();
+                renderProfilePage();
+            }
+
+            function renderHeaderAndGreeting() {
+                const defaultAvatar = "https://img.icons8.com/?size=100&id=Ry7mumEprV9w&format=png&color=000000";
+                dom.clientNameHeader.textContent = clientState.name;
+                dom.clientStatus.textContent = "מחובר";
+                dom.profileAvatar.src = clientState.avatar || defaultAvatar;
+                const hour = new Date().getHours();
+                let greetingText = (hour < 12) ? "בוקר טוב" : (hour < 18) ? "צהריים טובים" : "ערב טוב";
+                dom.greeting.textContent = `${greetingText}, ${clientState.name.split(' ')[0]}`;
+            }
+
+            function renderHomePage() {
+                const activeOrders = clientState.orders.filter(o => o['סטטוס'] !== 'סגור');
+                const container = dom.activeOrdersContainer;
+                container.innerHTML = '';
+                if (activeOrders.length > 0) {
+                    activeOrders.forEach(order => {
+                        const cardElement = createContainerCardElement(order);
+                        container.appendChild(cardElement);
+                        renderLeafletMap(cardElement.querySelector('.mini-map-container'), order['כתובת'], order);
+                    });
+                } else {
+                    container.innerHTML = '<div class="card"><p>אין לך כרגע הזמנות פעילות.</p></div>';
+                }
+            }
+            
+            function renderHistoryPage() {
+                 const closedOrders = clientState.orders.filter(o => o['סטטוס'] === 'סגור');
+                 dom.historyContent.innerHTML = closedOrders.map(order => `
+                    <div class="card">
+                        <h3>${order['שם פרויקט'] || 'הזמנה'}</h3>
+                        <p>${order['כתובת']}</p>
+                        <p>תאריך: ${order['תאריך הזמנה']}</p>
+                        <p>סטטוס: ${order['סטטוס']}</p>
+                    </div>
+                 `).join('');
+            }
+
+            function renderProfilePage() {
+                dom.userDetails.innerHTML = `
+                    <p><strong>שם:</strong> ${clientState.name}</p>
+                    <p><strong>מספר לקוח:</strong> ${clientState.id}</p>
+                    <p><strong>מספר הזמנות פעילות:</strong> ${clientState.orders.filter(o => o['סטטוס'] !== 'סגור').length}</p>
+                    <p><strong>מספר הזמנות שהושלמו:</strong> ${clientState.orders.filter(o => o['סטטוס'] === 'סגור').length}</p>
+                `;
+            }
+            
+            function createContainerCardElement(order) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <h3>${order['שם פרויקט'] || `הזמנה`}</h3>
+                    <p>${order['כתובת']}</p>
+                    <div class="mini-map-container" id="map-${order['תעודה']}"></div>
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button class="btn secondary" data-action="request-swap" data-id="${order['תעודה']}">החלפה</button>
+                        <button class="btn" data-action="request-pickup" data-id="${order['תעודה']}">פינוי</button>
+                        <button class="btn secondary" data-action="view-details" data-id="${order['תעודה']}">פרטים</button>
+                    </div>`;
+                return card;
+            }
+
+            async function sendClientRequest(requestType, orderId) {
+                 try {
+                    showToast("שולח בקשה...", '💬');
+                    await firebase.addDoc(firebase.collection(db, "clientRequests"), {
+                        clientId: clientState.id,
+                        clientName: clientState.name,
+                        requestType: requestType,
+                        orderId: orderId,
+                        timestamp: firebase.serverTimestamp(),
+                        status: 'new'
+                    });
+                    showToast("בקשתך נשלחה בהצלחה!", '✅');
+                } catch (error) { 
+                    showToast(`שגיאה בשליחת הבקשה`, '❌'); 
+                }
+            }
+
+             function renderLeafletMap(container, address, orderData) {
+                if (!container || !address) return;
+                
+                // Show loading state
+                container.classList.add('loading');
+                
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        container.classList.remove('loading');
+                        if (data && data.length > 0) {
+                            const { lat, lon } = data[0];
+                            const map = L.map(container, { zoomControl: false }).setView([lat, lon], 15);
+                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                            
+                            // Create custom marker
+                            const customIcon = L.divIcon({
+                                className: 'custom-marker',
+                                html: '<div style="background-color: #0b72b9; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>',
+                                iconSize: [24, 24],
+                                iconAnchor: [12, 12]
+                            });
+                            
+                            const marker = L.marker([lat, lon], { icon: customIcon }).addTo(map);
+                            
+                            // Add popup with order details
+                            if (orderData) {
+                                marker.bindPopup(`
+                                    <div style="padding: 10px;">
+                                        <h4 style="margin: 0 0 10px 0;">${orderData['שם פרויקט'] || 'הזמנה'}</h4>
+                                        <p style="margin: 0;">${orderData['כתובת']}</p>
+                                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">סטטוס: ${orderData['סטטוס']}</p>
+                                    </div>
+                                `);
+                            }
+                        } else { 
+                            container.innerHTML = 'כתובת לא נמצאה.'; 
+                        }
+                    }).catch(err => { 
+                        container.classList.remove('loading');
+                        container.innerHTML = 'שגיאה בטעינת מפה.'; 
+                    });
+            }
+
+            function showToast(message, icon = 'ℹ️') {
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+                dom.toastContainer.appendChild(toast);
+                setTimeout(() => toast.classList.add('show'), 10);
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                    toast.addEventListener('transitionend', () => toast.remove());
+                }, 3000);
+            }
+
+            function toggleAssistant() {
+                dom.assistantPanel.classList.toggle('open');
+            }
+
+            function handleAssistantAction(e) {
+                const action = e.currentTarget.dataset.action;
+                
+                switch(action) {
+                    case 'view-orders':
+                        navigateTo('page-home');
+                        break;
+                    case 'change-status':
+                        showToast('פתיחת דיאלוג שינוי סטטוס', 'info');
+                        break;
+                    case 'contact-support':
+                        showToast('מתחבר לתמיכה', 'info');
+                        break;
+                    case 'get-directions':
+                        if (clientState.orders.length > 0) {
+                            const firstOrder = clientState.orders[0];
+                            window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(firstOrder['כתובת'])}`, '_blank');
+                        } else {
+                            showToast('אין הזמנות פעילות לניווט', 'info');
+                        }
+                        break;
+                }
+                
+                dom.assistantPanel.classList.remove('open');
+            }
+            
+            function setupPushNotifications() {
+                // Check if notifications are enabled
+                if (localStorage.getItem('notifications') === 'false') {
+                    console.log('Notifications disabled by user');
+                    return;
+                }
+
+                // Request permission and get token
+                Notification.requestPermission().then((permission) => {
+                    if (permission === 'granted') {
+                        console.log('Notification permission granted.');
+                        
+                        // Get registration token
+                        firebase.getToken(messaging, { 
+                            vapidKey: 'BPkYpQ8Obf41BWjzMZD27tdpO8xCVQNwrTLznU-jjMb_S9i_y9XhRsdxE6ftEcmm0eJr6DoCM9JXh69dcGFio50' 
+                        }).then((currentToken) => {
+                            if (currentToken) {
+                                console.log('FCM Token:', currentToken);
+                                // Send the token to your server to keep track of it
+                                saveTokenToServer(currentToken);
+                            } else {
+                                console.log('No registration token available. Request permission to generate one.');
+                            }
+                        }).catch((err) => {
+                            console.log('An error occurred while retrieving token. ', err);
+                        });
+                        
+                        // Handle incoming messages
+                        firebase.onMessage(messaging, (payload) => {
+                            console.log('Message received. ', payload);
+                            showNotification(payload.notification.body, 'info');
+                        });
+                    } else {
+                        console.log('Unable to get permission to notify.');
+                    }
+                });
+            }
+
+            function saveTokenToServer(token) {
+                // In a real app, you would send this to your server
+                console.log('Saving token to server:', token);
+                localStorage.setItem('fcmToken', token);
+                
+                // Save to Firestore for this demo
+                if (clientState.id) {
+                    firebase.setDoc(firebase.doc(db, "clientTokens", clientState.id), {
+                        token: token,
+                        clientId: clientState.id,
+                        clientName: clientState.name,
+                        timestamp: firebase.serverTimestamp()
+                    }).catch((error) => {
+                        console.error("Error saving token: ", error);
+                    });
+                }
+            }
+
+            function showNotification(message, type = 'info') {
+                // Create a notification
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('ח.סבן - עדכון', {
+                        body: message,
+                        icon: 'https://i.postimg.cc/2SbDgD1B/1.png'
+                    });
+                }
+                
+                // Also show in-app toast
+                showToast(message, type === 'info' ? 'ℹ️' : type === 'success' ? '✅' : '❌');
+            }
+            
+            function setupEventListeners() {
+                document.body.addEventListener('click', (e) => {
+                    const actionElement = e.target.closest('[data-action]');
+                    if (!actionElement) return;
+
+                    const action = actionElement.dataset.action;
+                    if (action === 'navigate') {
+                        navigateTo(actionElement.dataset.page);
+                    } else if (action === 'request-swap' || action === 'request-pickup') {
+                        const orderId = actionElement.dataset.id;
+                        const type = action === 'request-swap' ? 'החלפה' : 'פינוי';
+                        sendClientRequest(type, orderId);
+                    } else if (action === 'view-details') {
+                        const orderId = actionElement.dataset.id;
+                        const order = clientState.orders.find(o => o['תעודה'] === orderId);
+                        if (order) {
+                            showOrderDetails(order);
+                        }
+                    }
+                });
+            }
+
+            function showOrderDetails(order) {
+                dom.modalContainer.innerHTML = `
+                    <div class="modal-content">
+                        <h3>${order['שם פרויקט'] || 'פרטי הזמנה'}</h3>
+                        <div style="margin: 20px 0;">
+                            <p><strong>כתובת:</strong> ${order['כתובת']}</p>
+                            <p><strong>סטטוס:</strong> ${order['סטטוס']}</p>
+                            <p><strong>תאריך הזמנה:</strong> ${order['תאריך הזמנה']}</p>
+                            ${order['תאריך יעד'] ? `<p><strong>תאריך יעד:</strong> ${order['תאריך יעד']}</p>` : ''}
+                        </div>
+                        <button class="btn" style="width: 100%;" data-action="close-modal">סגור</button>
+                    </div>`;
+                dom.modalContainer.classList.add('show');
+
+                // Add event listener for close button
+                setTimeout(() => {
+                    const closeBtn = document.querySelector('[data-action="close-modal"]');
+                    if (closeBtn) {
+                        closeBtn.addEventListener('click', () => {
+                            dom.modalContainer.classList.remove('show');
+                        });
+                    }
+                }, 100);
+            }
+            
+            initApp();
+        });
+    </script>
+</body>
+</html>
