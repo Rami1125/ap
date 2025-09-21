@@ -23,7 +23,7 @@ exports.sendPushNotificationOnNewRequest = onDocumentCreated("clientRequests/{re
     },
     webpush: {
       fcmOptions: {
-        link: "/dashboard-pro.html",
+        link: "/dashboard.html", // Updated link to your dashboard file
       },
     },
   };
@@ -45,7 +45,7 @@ exports.sendPushNotificationOnNewRequest = onDocumentCreated("clientRequests/{re
  * Triggers when a client request is updated.
  * Checks for status changes OR ETA updates and sends the correct notification.
  */
-exports.notifyClientOnStatusChange = onDocumentUpdated("clientRequests/{requestId}", async (event) => {
+exports.notifyClientOnUpdate = onDocumentUpdated("clientRequests/{requestId}", async (event) => {
   if (!event.data) {
     logger.log("No data associated with the event for", event.params.requestId);
     return;
@@ -71,7 +71,7 @@ exports.notifyClientOnStatusChange = onDocumentUpdated("clientRequests/{requestI
         body: `צפי ההגעה לבקשתך עודכן ל-${etaDateFormatted} בשעה ${after.etaTime}.`,
         icon: "https://i.postimg.cc/2SbDgD1B/1.png",
       },
-      webpush: { fcmOptions: { link: "/" } },
+      webpush: { fcmOptions: { link: "/" } }, // Link to the client's home page
     };
   }
   // Check 2: Did the status change? (Use 'else if' to avoid sending two notifications for one update)
@@ -91,7 +91,7 @@ exports.notifyClientOnStatusChange = onDocumentUpdated("clientRequests/{requestI
           body: statusMessage,
           icon: "https://i.postimg.cc/2SbDgD1B/1.png",
         },
-        webpush: { fcmOptions: { link: "/" } },
+        webpush: { fcmOptions: { link: "/" } }, // Link to the client's home page
       };
     }
   }
